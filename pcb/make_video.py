@@ -38,7 +38,8 @@ from pcb.connectivity import open_connections  # noqa: E402
 
 BG, PANEL, INK, INK2, LINE = "#0c110f", "#141b18", "#e6ebe7", "#8e9a93", "#26302b"
 FRONT, BACK, VIA, AIR, GLOW = "#d9534a", "#4f8fe6", "#d8dcd9", "#ffe14d", "#fff6c2"
-AGENT_COLORS = {"careful": "#6fd3b4", "bold": "#ff9a62", "layer-first": "#b9a2f5", "random": "#9aa29e",
+AGENT_COLORS = {"careful": "#6fd3b4", "bold": "#ff9a62", "layer-first": "#b9a2f5", "power-aware": "#f08bb4",
+                "random": "#9aa29e",
                 "carbon": "#e6ebe7", "router": "#8e9a93"}
 FPS = 30
 VERSION_RE = re.compile(r"^(\d+)__(.+)\.kicad_pcb$")
@@ -101,6 +102,8 @@ class Panel:
 
     def __init__(self, fig, rect, run, agent, box, label, color):
         self.run, self.agent, self.box, self.color = run, agent, box, color
+        self.narrow = rect[2] < 0.2            # five panels across: smaller labels, shorter captions
+        self.wrap = max(24, int(rect[2] * 1920 / 7.7))
         self.ax = fig.add_axes(rect)
         ax = self.ax
         ax.set_facecolor(PANEL)
@@ -139,9 +142,11 @@ class Panel:
         for c in (self.back, self.front, self.glow, self.air):
             ax.add_collection(c)
         self.vias = ax.scatter([], [], s=14, c=VIA, zorder=5, linewidths=0)
-        self.title = ax.text(0.0, 1.035, label, transform=ax.transAxes, color=color, fontsize=17,
+        self.title = ax.text(0.0, 1.035, label, transform=ax.transAxes, color=color,
+                             fontsize=13.5 if self.narrow else 17,
                              fontweight="bold", va="bottom")
-        self.badge = ax.text(1.0, 1.035, "", transform=ax.transAxes, color=INK, fontsize=16,
+        self.badge = ax.text(1.0, 1.035, "", transform=ax.transAxes, color=INK,
+                             fontsize=13.5 if self.narrow else 16,
                              va="bottom", ha="right", fontweight="bold")
         self.action = ax.text(0.02, 0.97, "", transform=ax.transAxes, color=INK, fontsize=12.5, va="top",
                               family="monospace", bbox=dict(boxstyle="round,pad=0.35", fc=BG, ec=color, lw=1.2,
@@ -175,7 +180,7 @@ class Panel:
         self.vias.set_sizes([(x["size"] * self.scale * 0.75) ** 2 for x in vv] or [1])
         self.air.set_segments([(o["a"], o["b"]) for o in v["open"]])
         n = len(v["open"])
-        self.badge.set_text("clean connections" if n == 0 else f"{n} open")
+        self.badge.set_text(("all routed" if self.narrow else "all connections routed") if n == 0 else f"{n} open")
         self.badge.set_color("#6fd39a" if n == 0 else AIR)
 
     def tick(self, t, frame):
@@ -188,8 +193,8 @@ class Panel:
             return
         txt = ev.get("text", "")
         act, _, why = txt.partition(" - ")
-        self.action.set_text(act.strip()[:46])
-        self.thought.set_text("\n".join(textwrap.wrap(why.strip().replace("**", ""), 58)[:4]))
+        self.action.set_text(act.strip()[: min(46, self.wrap - 6)])
+        self.thought.set_text("\n".join(textwrap.wrap(why.strip().replace("**", ""), self.wrap)[:5 if self.narrow else 4]))
 
 
 def render(args) -> None:
@@ -203,7 +208,7 @@ def render(args) -> None:
         a = e.get("agent")
         if a and a not in ("router", "carbon", "lead") and a not in agents and e["type"] in ("start", "note"):
             agents.append(a)
-    agents = agents[:3]
+    agents = agents[:4]
     cols = agents + (["random"] if control else [])
     n = len(cols)
     fig = plt.figure(figsize=(19.2, 10.8), dpi=100, facecolor=BG)
@@ -219,7 +224,7 @@ def render(args) -> None:
     panels = {}
     for i, a in enumerate(cols):
         src = control if a == "random" else run
-        label = "random policy (control)" if a == "random" else f"Hydrogen · {a}"
+        label = ("random (control)" if n >= 5 else "random policy (control)") if a == "random" else f"Hydrogen · {a}"
         panels[a] = Panel(fig, [left + i * (pw + gap), y0, pw, ph], src, a, box,
                           label, AGENT_COLORS.get(a, INK))
         panels[a].set_version(src["versions"][0], -99)
@@ -301,7 +306,7 @@ def render(args) -> None:
             else:
                 ra = [e for e in src["events"] if e["type"] == "start" and e["t"] <= t]
                 if ra:
-                    panels[a].action.set_text(f"{ra[-1].get('agent', '')}: {ra[-1].get('net', '')}"[:46])
+                    panels[a].action.set_text(f"{ra[-1].get('agent', '')}: {ra[-1].get('net', '')}"[: min(46, panels[a].wrap - 6)])
             panels[a].tick(t, f)
             if a == "random":
                 xs, ys = [0.0], [start_open]
