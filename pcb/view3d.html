@@ -68,11 +68,19 @@
   .log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .res h2 { margin:0 0 4px; font-size:19px; font-weight:680; } .res.pass h2 { color:var(--good); } .res.need h2 { color:var(--warn); }
   .res p { margin:0 0 10px; color:var(--ink2); }
-  .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .todo small { display:block; color:var(--ink3); }
+  .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .todo small { display:block; color:var(--ink3); } .todo small.way { color:var(--ink2); margin-top:2px; }
+  .todo small.ai { color:var(--ink2); margin-top:4px; } .todo small.ai b { font-weight:600; color:#1a56c4; } .todo [data-ai] { display:block; } .offer { margin-top:5px; border-color:var(--good); color:var(--good); }
   .acts { display:flex; flex-direction:column; gap:6px; margin-top:12px; } .acts .two { display:flex; gap:6px; } .acts .two button { flex:1; }
 
   .foot { grid-column:1 / -1; grid-row:3; display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid var(--line); color:var(--ink2); min-height:50px; }
+  @keyframes popin { 0% { transform:scale(.7); opacity:0; } 60% { transform:scale(1.08); opacity:1; } 100% { transform:scale(1); } }
+  @keyframes ring { 0% { box-shadow:0 0 0 0 rgba(217,134,50,.7); } 70% { box-shadow:0 0 0 14px rgba(217,134,50,0); } 100% { box-shadow:0 0 0 0 rgba(217,134,50,0); } }
+  .foot .primary.go { background:#d9741a; border-color:#d9741a; animation:popin .45s cubic-bezier(.2,.9,.3,1.3) both, ring 1.5s ease-out .45s infinite; }
+  .foot .primary.go:hover { background:#c2620f; } .foot .primary.go::after { content:"→"; margin-left:8px; display:inline-block; transition:transform .15s; }
+  .foot .primary.go:hover::after { transform:translateX(3px); }
+  .more { display:block; margin:14px auto 0; padding:8px 20px; }
+  .note { color:var(--ink3); font-size:12px; margin:6px 0 0; }
   .foot .grow { flex:1; } .foot b { color:var(--ink); font-weight:600; } .foot .primary { padding:8px 22px; font-size:14.5px; }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
@@ -95,7 +103,8 @@
     <div class="imp" id="imp"><div class="in">
       <div class="drop" id="drop"><h2>Drop a board file to open it</h2><p id="drophint">KiCad .kicad_pcb · the outline, parts, pads and required connections are read from the file</p>
         <button class="primary" id="choose">Choose file</button><input type="file" id="pick" accept=".kicad_pcb" class="hide"></div>
-      <div id="samples" class="hide"><p class="k" style="margin:22px 0 8px">Or start from a real open-source board</p><div class="cards" id="cards"></div>
+      <div id="samples" class="hide"><p class="k" style="margin:22px 0 8px">Or start from a real open-source board</p><div class="cards" id="cards"></div><button class="more hide" id="more">Show more boards</button>
+        <p class="note" id="badgenote"></p>
         <input type="search" id="search" placeholder="Search all benchmark boards…"><div class="results" id="results"></div></div>
     </div></div>
     <div class="legend hide" id="legend"><span><i style="background:#d98632"></i>front copper</span><span><i style="background:#4f86d9"></i>back copper</span><span><i style="background:#e23d4f"></i>still to connect</span></div>
@@ -116,7 +125,7 @@
 
   <div class="foot hide" id="foot"><span id="footmsg" class="grow"></span>
     <span id="footstats" class="hide num">Rule violations <b id="viol">0</b> &nbsp;·&nbsp; Copper <b id="len">0 mm</b> &nbsp;·&nbsp; Versions <b id="count">0</b></span>
-    <button id="stop" class="hide">Stop</button><button id="newb">Open another board</button><button class="primary hide" id="route">Route board</button></div>
+    <button id="skip" class="hide">Skip</button><button id="stop" class="hide">Stop</button><button id="newb">Open another board</button><button class="primary hide" id="route">Route board</button></div>
 </div>
 
 <script type="module">
@@ -180,8 +189,9 @@ function flyTo(x, y, z, dist) { controls.autoRotate = false; $('spin').textConte
   const dir = camera.position.clone().sub(controls.target).normalize(); fly = { target: new THREE.Vector3(x, y, z), pos: new THREE.Vector3(x, y, z).add(dir.multiplyScalar(dist)), t: 0 }; }
 
 // ---------- build the board piece by piece ----------
+let scenePads = [];
 function buildScene(s) {
-  resetWorld(); nets = s.nets || {};
+  resetWorld(); nets = s.nets || {}; scenePads = s.pads || [];
   const [x0, y0, x1, y1] = s.bbox; C = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   const W = x1 - x0, H = y1 - y0; SPAN = Math.max(W, H);
   boardMesh = new THREE.Mesh(new THREE.BoxGeometry(W, T, H), mat(0x2f6b54, { roughness: .78, transparent: true, opacity: 1 }));
@@ -258,7 +268,7 @@ function makeSeg(s, color) {
   const g = new THREE.Group(), bar = new THREE.Mesh(segGeo, m), c0 = new THREE.Mesh(capGeo, m), c1 = new THREE.Mesh(capGeo, m);
   bar.scale.set(1e-3, th, w); bar.castShadow = true; c0.scale.set(w, th, w); c1.scale.set(w, th, w); c1.visible = false;
   g.add(bar, c0, c1); g.position.set(ax, y, az); g.rotation.y = Math.atan2(-(bz - az), bx - ax); copperGroup.add(g);
-  return { g, m, len, a: [ax, az], b: [bx, bz], y, side: s.side, set(t) { bar.scale.x = Math.max(1e-3, len * t); c1.position.x = len * t; c1.visible = t > 0; } };
+  return { g, m, len, a: [ax, az], b: [bx, bz], y, side: s.side, net: s.net, set(t) { bar.scale.x = Math.max(1e-3, len * t); c1.position.x = len * t; c1.visible = t > 0; } };
 }
 function makeVia(v, color) {
   const [x, z] = P(v.x, v.y), r = Math.max(.35, v.size / 2);
@@ -356,12 +366,59 @@ function showStats(i) {
 }
 const idle = () => [...agents.values()].every(a => !a.job && !a.queue.length && !a.burst.length);
 
+// ---------- what is in the way of an unmade connection (measured, no model) ----------
+const cross = (p, q, r, t) => { const o = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d1 = o(r, t, p), d2 = o(r, t, q), d3 = o(p, q, r), d4 = o(p, q, t); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
+const distToSeg = (c, a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], L = vx * vx + vy * vy || 1e-9;
+  const k = Math.max(0, Math.min(1, ((c[0] - a[0]) * vx + (c[1] - a[1]) * vy) / L)); return Math.hypot(a[0] + k * vx - c[0], a[1] + k * vy - c[1]); };
+function blockersFor(pair, netName) {
+  const A = P(pair[0], pair[1]), B = P(pair[2], pair[3]), tracks = new Map(), parts = new Set();
+  for (const o of copper.values()) { if (!o.a || (nets[o.net] || '') === netName) continue;
+    if (cross(A, B, o.a, o.b)) { const key = (nets[o.net] || 'net ' + o.net) + '|' + o.side; if (!tracks.has(key)) tracks.set(key, []); tracks.get(key).push(o); } }
+  for (const pd of scenePads) { if (!pd.net || (nets[pd.net] || '') === netName) continue;
+    const c = P(pd.x, pd.y); if (distToSeg(c, A, B) < Math.max(pd.w, pd.h) / 2 + .15 && pd.ref) parts.add(pd.ref); }
+  const names = [...tracks.keys()].map(k => { const [n, side] = k.split('|'); return `the ${n} track on the ${side} layer`; })
+    .concat([...parts].slice(0, 4).map(r => `a pad of ${r}`));
+  return { objs: [...tracks.values()].flat(), text: names.length ? names.slice(0, 5).join(', ') + (names.length > 5 ? ` and ${names.length - 5} more` : '') : '' };
+}
+function closeUp(pair, objs) {                      // a top-down picture of the stuck area, blockers lit, for the explanation model
+  const [ax, az] = P(pair[0], pair[1]), [bx, bz] = P(pair[2], pair[3]), d = Math.max(SPAN * .5, Math.hypot(bx - ax, bz - az) * 2.4);
+  const keepPos = camera.position.clone(), keepTarget = controls.target.clone(), keepLit = lit.map(h => h.o);
+  highlight(objs); camera.position.set((ax + bx) / 2, d, (az + bz) / 2 + d * .35); camera.lookAt((ax + bx) / 2, 0, (az + bz) / 2);
+  renderer.render(scene, camera); const url = renderer.domElement.toDataURL('image/jpeg', .82);
+  camera.position.copy(keepPos); camera.lookAt(keepTarget); highlight(keepLit); return url;
+}
+async function explainStuck(pairs, blocks, descs) {
+  for (let i = 0; i < Math.min(pairs.length, 6); i++) {
+    const box = document.querySelector(`[data-ai="${i}"]`); if (!box) return;
+    let r; try { const res = await fetch('/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        board: lastState.board, from: descs[i][0].part, to: descs[i][1].part, net: descs[i][0].net || descs[i][1].net,
+        blockers: blocks[i].text, pair: pairs[i].slice(0, 4), image: closeUp(pairs[i], blocks[i].objs) }) });
+      if (!res.ok) return; r = await res.json(); } catch (e) { return; }
+    if (!document.body.contains(box) || !r || !r.text) continue;
+    box.innerHTML = `<small class="ai"><b>Suggested by Gemini:</b> ${esc(r.text)}</small>` +
+      (r.offer ? `<button class="small offer" data-fix="${i}">Let the agents fix it</button><small class="ai">Gemini rates this fixable by the agents${r.confidence != null ? ' (' + Math.round(r.confidence * 100) + '% confident)' : ''}.</small>`
+               : (r.offer === false ? `<small class="ai">Gemini rates this one as needing you${r.confidence != null ? ' (' + Math.round(r.confidence * 100) + '% confident)' : ''}.</small>` : ''));
+    const fix = box.querySelector('[data-fix]');
+    if (fix) fix.onclick = async () => { fix.disabled = true; fix.textContent = 'Starting…';
+      const rr = await post('/retry', JSON.stringify({ net: descs[i][0].net || descs[i][1].net, pair: pairs[i].slice(0, 4), blockers: blocks[i].text }), { 'Content-Type': 'application/json' }).catch(() => ({ ok: false }));
+      if (!rr.ok) { fix.textContent = rr.error || 'Retry is not available'; } };
+  }
+}
+let lit = [];
+function highlight(objs) {
+  for (const h of lit) { h.o.m.color.copy(h.c); h.o.m.emissive.copy(h.e); h.o.m.emissiveIntensity = h.i; } lit = [];
+  for (const o of objs) { lit.push({ o, c: o.m.color.clone(), e: o.m.emissive.clone(), i: o.m.emissiveIntensity });
+    o.m.color.set(0xe23d4f); o.m.emissive.set(0xe23d4f); o.m.emissiveIntensity = .9; }
+}
+
 // ---------- phases ----------
 function setPhase(p) {
   phase = p;
   show('imp', p === 'import'); show('left', p === 'assembling' || p === 'ready'); show('right', p === 'routing' || p === 'done');
   show('foot', p !== 'import'); show('legend', p !== 'import' && p !== 'assembling'); show('view', p !== 'import');
-  show('route', p === 'ready'); show('stop', p === 'routing'); show('footstats', p === 'routing' || p === 'done');
+  show('route', p === 'ready'); show('stop', p === 'routing'); show('skip', p === 'assembling');
+  $('route').classList.toggle('go', p === 'ready' && !!lastState.can_route && total != null); show('footstats', p === 'routing' || p === 'done');
   show('swarm', p !== 'done'); show('result', p === 'done'); show('newb', p !== 'routing');
   renderer.domElement.style.visibility = p === 'import' ? 'hidden' : 'visible';
   const order = ['import', 'assembling', 'routing', 'done'], at = { import: 0, assembling: 1, ready: 1, routing: 2, done: 3 }[p];
@@ -394,15 +451,20 @@ function verdict() {
     v.className = 'res need';
     const pairs = h.open_pairs || [], viols = h.viol_pts || [];
     const why = {}; for (const l of (lastState.result?.left || [])) if (l && l.net && l.reason) why[l.net] = l.reason;
+    const blocks = pairs.map(p => blockersFor(p, desc(p[4]).net || desc(p[5]).net));
     const rows = pairs.map((p, i) => { const a = desc(p[4]), b = desc(p[5]);
-      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · ${why[a.net] || why[b.net] ? esc(why[a.net] || why[b.net]) : 'not connected'}</small></span><button class="small" data-pair="${i}">Show</button></div>`; })
+      const way = blocks[i].text ? `<small class="way" title="Measured: tracks and pads of other signals that cross the straight line between the two pads">In the way of the direct path: ${esc(blocks[i].text)}</small>`
+        : `<small class="way">Nothing crosses the direct path between them</small>`;
+      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · ${why[a.net] || why[b.net] ? esc(why[a.net] || why[b.net]) : 'not connected'}</small>${way}<span data-ai="${i}"></span></span><button class="small" data-pair="${i}">Show</button></div>`; })
       .concat(viols.map((p, i) => `<div class="todo"><span><b>${esc(p[2])}</b><small>${esc(desc(p[3]).part)} · rule violation</small></span><button class="small" data-viol="${i}">Show</button></div>`));
     const head = [f.open ? `${f.open} connection${f.open === 1 ? '' : 's'}` : '', f.violations ? `${f.violations} rule violation${f.violations === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
     v.innerHTML = `<h2>${head} need${(f.open + f.violations) === 1 ? 's' : ''} you</h2>
       <p>${total != null ? total - f.open : '–'} of ${total ?? '–'} connections are routed and checked. What is left is marked in red on the board.</p>${rows.join('')}
       <div class="acts"><button class="primary" id="again">Try again</button><button id="dl">Download and finish in KiCad</button><button id="replay">Replay</button></div>`;
     v.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => { const p = pairs[+b.dataset.pair], [ax, az] = P(p[0], p[1]), [bx, bz] = P(p[2], p[3]);
-      flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .45, Math.hypot(bx - ax, bz - az) * 2.2)); });
+      highlight(blocks[+b.dataset.pair].objs);
+      flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .7, Math.hypot(bx - ax, bz - az) * 2.6)); });
+    explainStuck(pairs, blocks, pairs.map(p => [desc(p[4]), desc(p[5])]));
     v.querySelectorAll('[data-viol]').forEach(b => b.onclick = () => { const p = viols[+b.dataset.viol], [x, z] = P(p[0], p[1]); flyTo(x, 0, z, SPAN * .45); });
   }
   if (lastState.recorded) v.insertAdjacentHTML('beforeend', '<p style="margin-top:12px;font-size:12px;color:var(--ink3)">This run is saved for replay.</p>');
@@ -411,7 +473,7 @@ function verdict() {
   $('replay').onclick = replay;
 }
 function clearCopper() {
-  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0;
+  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0; lit = [];
   for (const a of agents.values()) { a.queue = []; a.burst = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
 }
 async function replay() {
@@ -426,6 +488,8 @@ async function startRoute(leave) {
 }
 $('route').onclick = e => startRoute(e.shiftKey ? 3 : 0);
 $('stop').onclick = () => post('/stop', '{}', { 'Content-Type': 'application/json' });
+$('skip').onclick = () => { asmT = asmEnd; };
+addEventListener('keydown', e => { if (e.key === 'Enter' && phase === 'ready' && !$('route').disabled && document.activeElement?.tagName !== 'INPUT') startRoute(0); });
 
 // ---------- polling ----------
 let busy = false, attempt = null;
@@ -433,8 +497,10 @@ async function poll() {
   if (busy) return; busy = true;
   try {
     const s = lastState = await (await fetch('/state')).json();
-    show('dummy', !!(s.dummy && s.board));
-    if (s.epoch !== epoch) { epoch = s.epoch; attempt = s.attempt; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
+    show('dummy', !!(s.dummy && s.board && phase !== 'import'));
+    // a freshly opened page always starts on Import, even if the server still holds a board from earlier
+    if (epoch === -1) { epoch = s.epoch; attempt = s.attempt; }
+    else if (s.epoch !== epoch) { epoch = s.epoch; attempt = s.attempt; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
     if (s.board && phase !== 'assembling' && phase !== 'import') {
       if (attempt === -1) attempt = s.attempt;
       else if (s.attempt !== attempt) { attempt = s.attempt; clearCopper(); heavy = heavy.slice(0, 1); applied = 0; outcome = '';
@@ -462,10 +528,18 @@ async function upload(f) { if (!f) return; const r = await post('/upload', await
 async function loadSamples() {
   const [feat, all] = await Promise.all([fetch('/featured').then(r => r.json()), fetch('/boards').then(r => r.json())]);
   if (!all.length) return; show('samples', true);
-  for (const b of feat) { const el = document.createElement('button'); el.className = 'cardb';
+  const shown = new Set();
+  const card = b => { shown.add(b.name); const el = document.createElement('button'); el.className = 'cardb';
+    const facts = b.parts != null ? `${b.parts} parts · ${b.signals} signals · ${esc(b.size)}` : 'open-source board';
     el.innerHTML = `<img alt="" loading="lazy" src="/thumb/${encodeURIComponent(b.name)}.svg"><div><strong>${esc(nice(b.name))}</strong>
-      <small>${b.parts} parts · ${b.signals} signals · ${esc(b.size)}</small>${b.router_failed ? '<br><span class="badge">Classic router failed</span>' : ''}</div>`;
-    el.onclick = () => loadBoard(b.name); $('cards').append(el); }
+      <small>${facts}</small>${b.router_failed ? '<br><span class="badge">Classic router failed</span>' : ''}</div>`;
+    el.onclick = () => loadBoard(b.name); $('cards').append(el); };
+  feat.forEach(card);
+  const more = () => { const rest = all.filter(b => !shown.has(b.name)); rest.slice(0, 12).forEach(card);
+    show('more', rest.length > 12); $('more').textContent = `Show more boards (${Math.max(0, rest.length - 12)} left)`; };
+  show('more', all.length > shown.size); $('more').textContent = `Show more boards (${all.length - shown.size} left)`; $('more').onclick = more;
+  const failed = all.filter(b => b.router_failed).length;
+  if (failed) $('badgenote').textContent = `Red badge: the classic router left this board unfinished in our run on the 99 smallest boards (${failed} of 99). Larger boards were not tested, so no badge does not mean it passed.`;
   $('search').placeholder = `Search all ${all.length} benchmark boards…`;
   $('search').oninput = e => { const q = e.target.value.trim().toLowerCase(); $('results').innerHTML = ''; if (!q) return;
     for (const b of all.filter(b => b.name.toLowerCase().includes(q)).slice(0, 12)) { const el = document.createElement('button');
