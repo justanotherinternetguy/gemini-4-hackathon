@@ -30,7 +30,7 @@
   .steps .on.pass { background:var(--goodbg); color:var(--good); } .steps .on.need { background:var(--warnbg); color:var(--warn); }
 
   .left { grid-column:1; grid-row:2; width:262px; border-right:1px solid var(--line); padding:14px 14px 0; display:flex; flex-direction:column; min-height:0; }
-  .right { grid-column:3; grid-row:2; width:316px; border-left:1px solid var(--line); padding:14px; overflow:auto; min-height:0; }
+  .right { grid-column:3; grid-row:2; width:340px; border-left:1px solid var(--line); padding:14px; overflow-y:auto; overflow-x:hidden; min-height:0; }
   .rows div { display:flex; justify-content:space-between; padding:2.5px 0; } .rows b { font-weight:600; }
   .parts { flex:1; overflow:auto; margin:0 -14px; padding:0 8px 10px; }
   .parts div { display:flex; gap:10px; padding:3px 6px; border-radius:5px; cursor:pointer; color:var(--ink3); }
@@ -68,9 +68,22 @@
   .log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .res h2 { margin:0 0 4px; font-size:19px; font-weight:680; } .res.pass h2 { color:var(--good); } .res.need h2 { color:var(--warn); }
   .res p { margin:0 0 10px; color:var(--ink2); }
-  .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-  .todo small { display:block; color:var(--ink3); } .todo small.way { color:var(--ink2); margin-top:2px; }
-  .todo small.ai { color:var(--ink2); margin-top:4px; } .todo small.ai b { font-weight:600; color:#1a56c4; } .todo [data-ai] { display:block; } .offer { margin-top:5px; border-color:var(--good); color:var(--good); }
+  .need { margin:12px 0 0; border-top:1px solid var(--line); }
+  .item { border-bottom:1px solid var(--line); }
+  .item > .rowb { display:flex; width:100%; align-items:center; gap:10px; padding:9px 8px; border:0; border-radius:6px; background:none; text-align:left; }
+  .item > .rowb:hover, .item.open > .rowb { background:var(--fill); }
+  .item .n { width:20px; height:20px; border-radius:50%; background:var(--badbg); color:var(--bad); font-size:11.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex:none; }
+  .item .t { flex:1; min-width:0; } .item .t b { font-weight:600; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item .t small { color:var(--ink3); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item .chev { color:var(--ink3); font-size:16px; transition:transform .15s; } .item.open .chev { transform:rotate(90deg); }
+  .item .body { display:none; padding:2px 4px 13px 38px; } .item.open .body { display:block; }
+  .lab { font-size:11.5px; color:var(--ink3); margin:9px 0 4px; display:flex; gap:6px; align-items:center; }
+  .tag { font-size:10.5px; font-weight:600; padding:0 6px; border-radius:99px; background:var(--fill); color:var(--ink2); border:1px solid var(--line); }
+  .tag.ai { background:#e8f0fe; color:#1a56c4; border-color:#cfdffb; }
+  .chips span { display:inline-block; background:var(--fill); border-radius:6px; padding:1px 7px; margin:0 4px 4px 0; font-size:12.5px; }
+  .aibox { border-left:2px solid #1a56c4; padding:1px 0 1px 10px; } .aibox.wait { color:var(--ink3); border-color:var(--line2); }
+  .meter { display:flex; align-items:center; gap:8px; margin-top:8px; font-size:12px; color:var(--ink2); } .meter .bar { flex:1; } .meter .bar i { background:#1a56c4; }
+  .linkb { border:0; background:none; padding:4px 0; color:var(--ink2); text-decoration:underline; }
   .acts { display:flex; flex-direction:column; gap:6px; margin-top:12px; } .acts .two { display:flex; gap:6px; } .acts .two button { flex:1; }
 
   .foot { grid-column:1 / -1; grid-row:3; display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid var(--line); color:var(--ink2); min-height:50px; }
@@ -388,30 +401,15 @@ function closeUp(pair, objs) {                      // a top-down picture of the
   renderer.render(scene, camera); const url = renderer.domElement.toDataURL('image/jpeg', .82);
   camera.position.copy(keepPos); camera.lookAt(keepTarget); highlight(keepLit); return url;
 }
-async function explainStuck(pairs, blocks, descs) {
-  // close-ups are taken one after another (they move the camera), then the model calls run side by side
-  const n = Math.min(pairs.length, 3), shots = [];
-  for (let i = 0; i < n; i++) shots.push(closeUp(pairs[i], blocks[i].objs));
-  const modelName = m => ({ 'gemini-4-neon': 'Gemini 4 Neon', 'gemini-4-hydrogen': 'Gemini 4 Hydrogen', 'gemini-4-carbon': 'Gemini 4 Carbon', 'gemini-4-argon': 'Gemini 4 Argon' }[m] || 'Gemini');
-  await Promise.all(shots.map(async (image, i) => {
-    const box = document.querySelector(`[data-ai="${i}"]`); if (!box) return;
-    box.innerHTML = '<small class="ai" style="color:var(--ink3)">Asking Gemini why this one is stuck…</small>';
-    let r = null; try { const res = await fetch('/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        board: lastState.board, from: descs[i][0].part, to: descs[i][1].part, net: descs[i][0].net || descs[i][1].net,
-        blockers: blocks[i].text, pair: pairs[i].slice(0, 4), image }) }); if (res.ok) r = await res.json(); } catch (e) {}
-    if (!document.body.contains(box)) return;
-    if (!r || !r.text) { box.innerHTML = ''; return; }
-    const pct = r.confidence != null ? ` (${Math.round(r.confidence * 100)}% confident)` : '';
-    const rating = r.offer === true ? `The Decisions API rates this fixable by the agents moving one track${pct}.`
-                 : r.offer === false ? `The Decisions API rates this one as needing you${pct}.` : '';
-    box.innerHTML = `<small class="ai"><b>Suggested by ${esc(modelName(r.model))}:</b> ${esc(r.text)}</small>` + (rating ? `<small class="ai">${rating}</small>` : '') +
-      (r.offer === true && r.retry_available ? `<button class="small offer" data-fix="${i}">Let the agents fix it</button>` : '');
-    const fix = box.querySelector('[data-fix]');
-    if (fix) fix.onclick = async () => { fix.disabled = true; fix.textContent = 'Starting…';
-      const rr = await post('/retry', JSON.stringify({ net: descs[i][0].net || descs[i][1].net, pair: pairs[i].slice(0, 4), blockers: blocks[i].text }), { 'Content-Type': 'application/json' }).catch(() => ({ ok: false }));
-      if (!rr.ok) fix.textContent = rr.error || 'Retry is not available'; };
-  }));
+const aiCache = new Map();                           // connection index -> promise of the /explain reply (or null)
+function askGemini(i, pair, block, d) {              // call before moving the camera: it takes the close-up picture
+  if (!aiCache.has(i)) { const image = closeUp(pair, block.objs);
+    aiCache.set(i, fetch('/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      board: lastState.board, from: d[0].part, to: d[1].part, net: d[0].net || d[1].net, blockers: block.text, pair: pair.slice(0, 4), image }) })
+      .then(r => r.ok ? r.json() : null).catch(() => null)); }
+  return aiCache.get(i);
 }
+const modelName = m => ({ 'gemini-4-neon': 'Gemini 4 Neon', 'gemini-4-hydrogen': 'Gemini 4 Hydrogen', 'gemini-4-carbon': 'Gemini 4 Carbon', 'gemini-4-argon': 'Gemini 4 Argon' }[m] || 'Gemini');
 let lit = [];
 function highlight(objs) {
   for (const h of lit) { h.o.m.color.copy(h.c); h.o.m.emissive.copy(h.e); h.o.m.emissiveIntensity = h.i; } lit = [];
@@ -459,20 +457,45 @@ function verdict() {
     const pairs = h.open_pairs || [], viols = h.viol_pts || [];
     const why = {}; for (const l of (lastState.result?.left || [])) if (l && l.net && l.reason) why[l.net] = l.reason;
     const blocks = pairs.map(p => blockersFor(p, desc(p[4]).net || desc(p[5]).net));
-    const rows = pairs.map((p, i) => { const a = desc(p[4]), b = desc(p[5]);
-      const way = blocks[i].text ? `<small class="way" title="Measured: tracks and pads of other signals that cross the straight line between the two pads">In the way of the direct path: ${esc(blocks[i].text)}</small>`
-        : `<small class="way">Nothing crosses the direct path between them</small>`;
-      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · ${why[a.net] || why[b.net] ? esc(why[a.net] || why[b.net]) : 'not connected'}</small>${way}<span data-ai="${i}"></span></span><button class="small" data-pair="${i}">Show</button></div>`; })
-      .concat(viols.map((p, i) => `<div class="todo"><span><b>${esc(p[2])}</b><small>${esc(desc(p[3]).part)} · rule violation</small></span><button class="small" data-viol="${i}">Show</button></div>`));
+    const items = pairs.map((p, i) => { const a = desc(p[4]), b = desc(p[5]), r = why[a.net] || why[b.net];
+        return { pair: i, title: `${a.part} → ${b.part}`, sub: (a.net || b.net || 'signal') + (r ? ' · ' + r : ' · not connected'), d: [a, b] }; })
+      .concat(viols.map((p, i) => ({ viol: i, title: p[2], sub: desc(p[3]).part + ' · rule violation' })));
     const head = [f.open ? `${f.open} connection${f.open === 1 ? '' : 's'}` : '', f.violations ? `${f.violations} rule violation${f.violations === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
     v.innerHTML = `<h2>${head} need${(f.open + f.violations) === 1 ? 's' : ''} you</h2>
-      <p>${total != null ? total - f.open : '–'} of ${total ?? '–'} connections are routed and checked. What is left is marked in red on the board.</p>${rows.join('')}
-      <div class="acts"><button class="primary" id="again">Try again</button><button id="dl">Download and finish in KiCad</button><button id="replay">Replay</button></div>`;
-    v.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => { const p = pairs[+b.dataset.pair], [ax, az] = P(p[0], p[1]), [bx, bz] = P(p[2], p[3]);
-      highlight(blocks[+b.dataset.pair].objs);
-      flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .7, Math.hypot(bx - ax, bz - az) * 2.6)); });
-    explainStuck(pairs, blocks, pairs.map(p => [desc(p[4]), desc(p[5])]));
-    v.querySelectorAll('[data-viol]').forEach(b => b.onclick = () => { const p = viols[+b.dataset.viol], [x, z] = P(p[0], p[1]); flyTo(x, 0, z, SPAN * .45); });
+      <p style="margin:0">${total != null ? total - f.open : '–'} of ${total ?? '–'} connections are routed and checked. Open one to see it on the board.</p>
+      <div class="need">${items.map((it, k) => `<div class="item" data-k="${k}"><button class="rowb"><span class="n">${k + 1}</span>
+        <span class="t"><b>${esc(it.title)}</b><small>${esc(it.sub)}</small></span><span class="chev">›</span></button><div class="body"></div></div>`).join('')}</div>
+      <div class="acts"><button class="primary" id="again">Try again</button><button id="dl">Download and finish in KiCad</button><button class="linkb" id="replay">Replay the run</button></div>`;
+    aiCache.clear();
+    const openItem = k => {
+      const it = items[k], el = v.querySelector(`.item[data-k="${k}"]`), was = el.classList.contains('open');
+      v.querySelectorAll('.item.open').forEach(e => e.classList.remove('open'));
+      if (was) { highlight([]); return; }
+      el.classList.add('open'); const body = el.querySelector('.body');
+      if (it.viol != null) { const p = viols[it.viol], [x, z] = P(p[0], p[1]); highlight([]);
+        body.innerHTML = '<div class="lab">Reported by KiCad’s design-rule checker <span class="tag">measured</span></div>' + esc(p[2]);
+        flyTo(x, 0, z, SPAN * .45); return; }
+      const p = pairs[it.pair], blk = blocks[it.pair], [ax, az] = P(p[0], p[1]), [bx, bz] = P(p[2], p[3]);
+      const chips = blk.text ? blk.text.split(', ').map(t => `<span>${esc(t.replace(/^the /, '').replace(/^a /, ''))}</span>`).join('') : '<span>nothing crosses the direct path</span>';
+      if (!body.dataset.built) { body.dataset.built = 1;
+        body.innerHTML = `<div class="lab">In the way <span class="tag" title="Tracks and pads of other signals that cross the straight line between the two pads">measured</span></div><div class="chips">${chips}</div>
+          <div class="ai-part"><div class="lab">Why it is stuck <span class="tag ai">AI</span></div><div class="aibox wait">Asking Gemini…</div></div>`; }
+      const ask = askGemini(it.pair, p, blk, it.d);        // takes its close-up before the camera moves
+      highlight(blk.objs); flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .95, Math.hypot(bx - ax, bz - az) * 3.2));
+      ask.then(r => { const part = body.querySelector('.ai-part'); if (!part || part.dataset.done) return; part.dataset.done = 1;
+        if (!r || !r.text) { part.remove(); return; }
+        const pct = r.confidence != null ? Math.round(r.confidence * 100) : null;
+        const meter = r.offer == null ? '' : `<div class="meter" title="A yes/no rating from the Decisions API: could the agents fix this by moving at most one track?">
+          <span>${r.offer ? 'Agents could fix it by moving one track' : 'Likely needs a person'}</span>${pct != null ? `<span class="bar"><i style="width:${pct}%"></i></span><b>${pct}%</b>` : ''}</div>`;
+        part.innerHTML = `<div class="lab">Why it is stuck <span class="tag ai">AI · ${esc(modelName(r.model))}</span></div><div class="aibox">${esc(r.text)}</div>${meter}` +
+          (r.offer === true && r.retry_available ? '<button class="small" style="margin-top:8px" data-fix>Let the agents fix it</button>' : '');
+        const fix = part.querySelector('[data-fix]');
+        if (fix) fix.onclick = async () => { fix.disabled = true; fix.textContent = 'Starting…';
+          const rr = await post('/retry', JSON.stringify({ net: it.d[0].net || it.d[1].net, pair: p.slice(0, 4), blockers: blk.text }), { 'Content-Type': 'application/json' }).catch(() => ({ ok: false }));
+          if (!rr.ok) fix.textContent = rr.error || 'Retry is not available'; }; });
+    };
+    v.querySelectorAll('.item > .rowb').forEach(b => b.onclick = () => openItem(+b.parentElement.dataset.k));
+    if (items.length) setTimeout(() => { if (phase === 'done' && !v.querySelector('.item.open')) openItem(0); }, 900);
   }
   if (lastState.recorded) v.insertAdjacentHTML('beforeend', '<p style="margin-top:12px;font-size:12px;color:var(--ink3)">This run is saved for replay.</p>');
   $('dl').onclick = () => { location.href = '/download'; };
