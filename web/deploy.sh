@@ -12,7 +12,7 @@ cd "$ROOT"
 .venv/bin/python -m web.build
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
-cp -r runs/web/index.html runs/web/style.css runs/web/app.js runs/web/img "$OUT/"
+cp -r runs/web/index.html runs/web/evidence.html runs/web/style.css runs/web/app.js runs/web/img "$OUT/"
 echo "$DOMAIN" > "$OUT/CNAME"
 touch "$OUT/.nojekyll"
 REMOTE="$(git remote get-url origin)"

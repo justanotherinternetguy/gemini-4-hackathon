@@ -6,7 +6,11 @@ Flow in the page:
      then the parts turn to glass and every connection still to make is shown as a red line.
   3. Route: the solver command is started. It saves new versions of the board into a folder;
      each version's new copper is animated, led by the agent that produced it.
-  4. Verdict: KiCad's design-rule checker decides. Fully connected with zero violations is a
+  4. Fix on the spot: if KiCad's design-rule checker finds violations or open connections in the
+     solver's final version, Gemini agents start fixing that exact board right away
+     (pcb/repair/fix_violations.py, up to --fix-rounds rounds). Their versions append to the same
+     run, so the page keeps animating; no click is needed.
+  5. Verdict: KiCad's design-rule checker decides. Fully connected with zero violations is a
      clean pass; otherwise the page lists exactly which connections are left for the engineer.
 
 The solver side of this is specified in pcb/CONTRACT.md. In short: save board versions into the
@@ -56,6 +60,10 @@ import board_parse as bp
 HERE = Path(__file__).resolve().parent
 MIME = {".js": "text/javascript", ".html": "text/html; charset=utf-8", ".css": "text/css"}
 COPPER_ITEM_RE = re.compile(r"\n\t\((?:segment|via|arc)\b.*?\n\t\)", re.S)
+ROOT = HERE.parent
+FIX_CMD = (f"{shlex.quote(sys.executable)} -m pcb.repair.fix_violations "
+           "--board {board_file} --project {project} "
+           "--out {out} --name {board} --round {round}")
 DUMMY_CMD = (f"{shlex.quote(sys.executable)} {shlex.quote(str(HERE / 'make_test_frames.py'))} "
              "--routed {routed} --out {out} --agents 5 --burst 5 --delay 2.2 --no-start --events")
 
@@ -110,8 +118,9 @@ class Studio:
     """One loaded board, the folder being watched, the versions seen so far and the solver process."""
 
     def __init__(self, boards_dir: Path | None, route_cmd: str | None, watch_tpl: str, cwd: Path,
-                 record_dir: Path | None, interval: float):
+                 record_dir: Path | None, interval: float, fix_cmd: str | None = FIX_CMD, fix_rounds: int = 2):
         self.boards_dir, self.interval = boards_dir, interval
+        self.fix_cmd, self.fix_rounds = fix_cmd, fix_rounds
         self.route_cmd = route_cmd or DUMMY_CMD
         self.dummy = route_cmd is None
         self.watch_tpl, self.cwd, self.record_dir = watch_tpl, cwd, record_dir
@@ -138,6 +147,11 @@ class Studio:
         self.solver_exit: int | None = None
         self.recorded: str | None = None
         self.failed: set[str] = set()
+        self.srcs: list[Path] = []          # where each version's file lives (route and fix runs differ)
+        self.fix_round = 0                  # Gemini fix rounds started for the current Route
+        self.fix_wait: float | None = None  # solver finished; waiting for the rule check to decide on a fix
+        self.fix_from = 0                   # number of versions when the current fix round started
+        self.fixing = False                 # the running process is the fixer
         res = HERE / "bench" / "results" / "freerouting_d3a.json"
         if res.is_file():
             try:
@@ -200,8 +214,10 @@ class Studio:
         return re.sub(r"[^A-Za-z0-9_.-]", "_", b["name"]) + "_routed.kicad_pcb", Path(last).read_bytes()
 
     def stop_route(self) -> None:
-        """Stop the solver but keep what it saved; the verdict then reports where it got to."""
+        """Stop the solver (or the fixer) but keep what it saved; the verdict then reports where it got to."""
         with self.lock:
+            self.fix_round = self.fix_rounds        # no automatic fix after a Stop
+            self.fix_wait = None
             self._kill()
 
     def _kill(self) -> None:
@@ -241,6 +257,7 @@ class Studio:
             self.frames, self.heavy, self.events, self.result = [], [], [], None
             self.seen, self.events_pos, self.watch = {}, 0, None
             self.route_started = self.route_seconds = self.solver_exit = self.recorded = None
+            self.srcs, self.fix_round, self.fix_wait, self.fixing = [], 0, None, False
             # version 0 is always the bare board, straight from the imported file
             self._add_frame("start", "", unrouted, 0.0, self.epoch, self.attempt)
         print(f"[load] {name}: {len(scene['components'])} components, {len(scene['pads'])} pads", flush=True)
@@ -266,8 +283,9 @@ class Studio:
             cmd = self.route_cmd.format(**{k: shlex.quote(v) for k, v in fill.items()})
             if self.dummy and leave > 0:
                 cmd += f" --leave {int(leave)}"       # test only: preview an unfinished result
-            del self.frames[1:], self.heavy[1:]
+            del self.frames[1:], self.heavy[1:], self.srcs[1:]
             self.events, self.result, self.seen, self.events_pos = [], None, {}, 0
+            self.fix_round, self.fix_wait, self.fixing = 0, None, False
             self.route_started, self.route_seconds, self.solver_exit, self.recorded = time.time(), None, None, None
             self.proc = subprocess.Popen(cmd, shell=True, cwd=str(self.cwd), stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL, start_new_session=True)
@@ -294,10 +312,46 @@ class Studio:
                     with self.lock:
                         self.solver_exit = self.proc.returncode
                         self.route_seconds = round(time.time() - self.route_started, 1)
+                        if self.can_fix():           # same lock as route_seconds: the page keeps "routing"
+                            self.fix_wait = time.time()   # until the rule check decides on a fix
                     self.record(b, watch)
+                if self.fix_wait:
+                    self.maybe_fix()
             except Exception as e:
                 print(f"[watcher] {type(e).__name__}: {e}", flush=True)
             time.sleep(self.interval)
+
+    # ----- Gemini fixes what the rule checker found -----
+    def can_fix(self) -> bool:
+        return bool(self.fix_cmd and not self.dummy and self.cli and self.board and len(self.frames) > 1
+                    and self.fix_round < self.fix_rounds
+                    and (self.fix_round == 0 or len(self.frames) > self.fix_from))   # stop when a round changed nothing
+
+    def maybe_fix(self) -> None:
+        """Once the newest version is rule-checked: start the fixer if it is not clean, else let the verdict show."""
+        with self.lock:
+            if self.proc and self.proc.poll() is None:
+                return
+            last = self.frames[-1] if self.frames else None
+            if last is None or (not last["checked"] and time.time() - self.fix_wait < 180):
+                return                                  # the rule check is still running
+            if not last["checked"] or (last["open"] == 0 and last["violations"] == 0):
+                self.fix_wait = None
+                return
+            self.fix_wait = None
+            self.fix_round += 1
+            self.fix_from = len(self.frames)
+            b = self.board
+            out = Path(tempfile.mkdtemp(prefix=f"fix{self.fix_round}_", dir=self.tmp)) / "live"
+            out.mkdir()
+            fill = {"board_file": str(self.srcs[-1]), "project": str(b["project"] or ""), "out": str(out),
+                    "board": b["name"], "round": str(self.fix_round)}
+            cmd = self.fix_cmd.format(**{k: shlex.quote(v) for k, v in fill.items()})
+            self.watch, self.seen, self.events, self.events_pos, self.result = out, {}, [], 0, None
+            self.route_seconds, self.solver_exit, self.fixing = None, None, True
+            self.proc = subprocess.Popen(cmd, shell=True, cwd=str(ROOT), stdout=subprocess.DEVNULL,
+                                         stderr=subprocess.DEVNULL, start_new_session=True)
+        print(f"[fix {self.fix_round}] {last['violations']} violation(s), {last['open']} open -> {cmd}", flush=True)
 
     def scan(self, b: dict, watch: Path, epoch: int, attempt: int) -> None:
         files = sorted(watch.glob("*.kicad_pcb"), key=lambda p: (p.stat().st_mtime, p.name))
@@ -344,6 +398,7 @@ class Studio:
     def _add_frame(self, name: str, agent: str, path: Path, t: float, epoch: int, attempt: int) -> None:
         cu = bp.copper(path)
         self.last_path = path
+        self.srcs.append(Path(path))
         idx = len(self.frames)
         self.frames.append({"id": idx, "name": name, "agent": agent, "t": t, "open": None, "violations": None,
                             "length_mm": cu["length_mm"], "segments": len(cu["segments"]),
@@ -380,14 +435,18 @@ class Studio:
         dst.mkdir(parents=True, exist_ok=True)
         with self.lock:
             versions = [{"file": f["name"], "t": f["t"], "agent": f["agent"]} for f in self.frames[1:]]
+            srcs = dict(zip((f["name"] for f in self.frames[1:]), self.srcs[1:]))
+            extra_names = {"events.jsonl": f"events_fix{self.fix_round}.jsonl" if self.fixing else "events.jsonl",
+                           "result.json": f"result_fix{self.fix_round}.json" if self.fixing else "result.json"}
             meta = {"board": b["name"], "run_id": self.run_id, "seconds": self.route_seconds,
                     "solver_exit": self.solver_exit, "test_data": self.dummy, "versions": versions}
         for v in versions:
-            if (watch / v["file"]).is_file():
-                shutil.copyfile(watch / v["file"], dst / v["file"])
-        for extra in ("events.jsonl", "result.json"):
+            src = srcs.get(v["file"])
+            if src and src.is_file():
+                shutil.copyfile(src, dst / v["file"])
+        for extra, as_name in extra_names.items():
             if (watch / extra).is_file():
-                shutil.copyfile(watch / extra, dst / extra)
+                shutil.copyfile(watch / extra, dst / as_name)
         (dst / "manifest.json").write_text(json.dumps(meta, indent=1))
         with self.lock:
             self.recorded = str(dst)
@@ -395,14 +454,15 @@ class Studio:
 
     def state(self) -> dict:
         with self.lock:
-            routing = bool(self.proc and self.proc.poll() is None)
+            routing = bool(self.proc and self.proc.poll() is None) or self.fix_wait is not None
             can = bool(self.board) and ("{routed}" not in self.route_cmd or bool(self.board["routed"]))
             return {"epoch": self.epoch, "attempt": self.attempt, "board": self.board["name"] if self.board else None,
                     "frames": list(self.frames), "events": list(self.events), "result": self.result,
                     "checker": bool(self.cli), "dummy": self.dummy, "routing": routing,
                     "route_started": self.route_started is not None, "route_seconds": self.route_seconds,
                     "solver_exit": self.solver_exit, "recorded": self.recorded, "can_route": can,
-                    "has_project": bool(self.board and self.board["project"])}
+                    "has_project": bool(self.board and self.board["project"]),
+                    "fixing": self.fixing and routing, "fix_round": self.fix_round}
 
 
 def make_handler(s: Studio, title: str):
@@ -505,10 +565,15 @@ def main() -> None:
     ap.add_argument("--title", default="routr studio")
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--interval", type=float, default=0.3)
+    ap.add_argument("--fix-rounds", type=int, default=2,
+                    help="Gemini fix rounds when the final version still breaks a rule (0 turns it off)")
+    ap.add_argument("--fix-cmd", default=FIX_CMD, help="fixer command; placeholders {board_file} {project} {out} "
+                                                       "{board} {round}; runs in the repository root")
     args = ap.parse_args()
 
     s = Studio(Path(args.boards_dir) if args.boards_dir else None, args.route_cmd, args.watch_dir,
-               Path(args.cwd).resolve(), Path(args.record_dir) if args.record_dir else None, args.interval)
+               Path(args.cwd).resolve(), Path(args.record_dir) if args.record_dir else None, args.interval,
+               args.fix_cmd if args.fix_rounds > 0 else None, args.fix_rounds)
     if not s.cli:
         print("kicad-cli not found (set KICAD_CLI): showing copper only, no rule check", flush=True)
     if s.dummy:

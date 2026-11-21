@@ -445,12 +445,13 @@ function verdict() {
   const desc = d => { const m = /pad (\S+) \[(.*?)\] of (\S+)/.exec(d || ''); return m ? { part: `${m[3]}.${m[1]}`, net: m[2] } : { part: d || '?', net: '' }; };
   const facts = `<div class="rows num"><div><span>Connections</span><b>${total != null ? total - f.open : '–'} of ${total ?? '–'}</b></div>
     <div><span>Rule violations</span><b>${f.violations}</b></div><div><span>Copper</span><b>${Math.round(f.length_mm).toLocaleString()} mm</b></div>
-    <div><span>Layer changes</span><b>${f.vias}</b></div><div><span>Agents · time</span><b>${n} · ${secs}</b></div>${lastState.result?.attempts != null ? `<div><span>Attempts</span><b>${esc(lastState.result.attempts)}</b></div>` : ''}</div>` +
+    <div><span>Layer changes</span><b>${f.vias}</b></div><div><span>Agents · time</span><b>${n} · ${secs}</b></div>${lastState.fix_round ? `<div><span>Gemini fix rounds</span><b>${lastState.fix_round}</b></div>` : ''}${lastState.result?.attempts != null ? `<div><span>Attempts</span><b>${esc(lastState.result.attempts)}</b></div>` : ''}</div>` +
     (lastState.solver_exit ? `<p style="color:var(--bad);margin-top:8px">The solver stopped with an error (exit ${esc(lastState.solver_exit)}).</p>` : '');
   outcome = f.open === 0 && f.violations === 0 ? 'pass' : 'need';
   if (outcome === 'pass') {
     v.className = 'res pass';
-    v.innerHTML = `<h2>Ready to manufacture</h2><p>Every connection is made and no rule is broken.</p>${facts}
+    const fixed = lastState.fix_round ? fixNote() : '';
+    v.innerHTML = `<h2>Ready to manufacture</h2><p>Every connection is made and no rule is broken.${fixed}</p>${facts}
       <div class="acts"><button class="primary" id="dl">Download routed board</button><div class="two"><button id="replay">Replay</button><button id="again">Route again</button></div></div>`;
   } else {
     v.className = 'res need';
@@ -502,6 +503,13 @@ function verdict() {
   $('again').onclick = e => startRoute(e.shiftKey ? 3 : 0);
   $('replay').onclick = replay;
 }
+function fixNote() {                                // what the automatic Gemini fix changed, from the checked versions
+  const i = frames.findIndex(f => /^fix\d+_/.test(f.name || '')), before = i > 0 ? frames[i - 1] : null;
+  if (!before || !before.checked) return ' Gemini fixed the rule checker’s findings on the spot.';
+  const parts = [before.violations ? `${before.violations} rule violation${before.violations === 1 ? '' : 's'}` : '',
+                 before.open ? `${before.open} open connection${before.open === 1 ? '' : 's'}` : ''].filter(Boolean);
+  return parts.length ? ` KiCad found ${parts.join(' and ')}; Gemini fixed ${parts.length > 1 || (before.violations + before.open) > 1 ? 'them' : 'it'} on the spot.` : '';
+}
 function clearCopper() {
   for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0; lit = [];
   for (const a of agents.values()) { a.queue = []; a.burst = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
@@ -536,6 +544,10 @@ async function poll() {
       else if (s.attempt !== attempt) { attempt = s.attempt; clearCopper(); heavy = heavy.slice(0, 1); applied = 0; outcome = '';
         routeT0 = performance.now(); frames = s.frames; setPhase('routing'); showStats(0); }
       frames = s.frames;
+      // KiCad found errors and Gemini is fixing them on the spot: same board, same run, keep the copper
+      if (phase === 'done' && s.routing && s.attempt === attempt) { outcome = ''; highlight([]); setPhase('routing'); }
+      if (phase === 'routing') { const m = s.fixing ? `Gemini is fixing what KiCad’s rule checker found (round ${s.fix_round}). Every new version is checked again.`
+          : 'Agents are laying copper. Every version is checked by KiCad’s design-rule checker.'; if ($('footmsg').textContent !== m) $('footmsg').textContent = m; }
       if (frames[0]?.checked && total == null) { total = frames[0].open; $('i-conns').textContent = total; if (phase === 'ready') setPhase('ready'); }
       if (phase === 'ready' && frames[0]?.checked && !webShown) { webShown = 1; applied = 0; setWeb((await getHeavy(0)).open_pairs); }
       if (phase === 'ready' && s.route_started && frames.length > 1) { applied = 0; routeT0 = performance.now() - frames[frames.length - 1].t * 1000; setPhase('routing'); }
