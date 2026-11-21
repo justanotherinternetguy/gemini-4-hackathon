@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 318" font-family="Noto Sans, DejaVu Sans, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4a4945"/>
+    </marker>
+    <marker id="arb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1f5fae"/>
+    </marker>
+  </defs>
+  <style>
+    .b { fill: #fff; stroke: #4a4945; stroke-width: 1.2; }
+    .llm { fill: #e8f0fa; stroke: #1f5fae; stroke-width: 1.4; }
+    .sim { fill: #e6f4ea; stroke: #1d7a3a; stroke-width: 1.4; }
+    .plan { fill: #fafaf7; stroke: #9a6200; stroke-width: 1.2; stroke-dasharray: 5 3; }
+    .t { font-size: 11.5px; font-weight: 700; fill: #1b1b1a; }
+    .s { font-size: 9.4px; fill: #4a4945; }
+    .k { font-size: 8.6px; font-weight: 700; letter-spacing: 0.08em; fill: #1f5fae; }
+    .kg { font-size: 8.6px; font-weight: 700; letter-spacing: 0.08em; fill: #1d7a3a; }
+    .kp { font-size: 8.6px; font-weight: 700; letter-spacing: 0.08em; fill: #9a6200; }
+    .kk { font-size: 8.6px; font-weight: 700; letter-spacing: 0.08em; fill: #77766f; }
+    .a { stroke: #4a4945; stroke-width: 1.4; fill: none; }
+    .fb { stroke: #1f5fae; stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+    .lab { font-size: 9px; fill: #1f5fae; }
+  </style>
+
+  <!-- row 1 -->
+  <rect class="b" x="6" y="18" width="150" height="112" rx="5"/>
+  <text class="kk" x="16" y="34">1 · INPUTS</text>
+  <text class="t" x="16" y="51">Circuit + spec</text>
+  <text class="s" x="16" y="67">AMPICBench netlist (SKY130)</text>
+  <text class="s" x="16" y="80">circuit card: roles, bias rules</text>
+  <text class="s" x="16" y="93">11 knobs with ranges</text>
+  <text class="s" x="16" y="106">spec + guard band</text>
+  <text class="s" x="16" y="119">schematic PNG</text>
+
+  <rect class="llm" x="188" y="18" width="150" height="112" rx="5"/>
+  <text class="k" x="198" y="34">2 · ARCHITECT</text>
+  <text class="t" x="198" y="51">gemini-4-carbon</text>
+  <text class="s" x="198" y="67">thinking: medium</text>
+  <text class="s" x="198" y="80">diagnoses the best designs</text>
+  <text class="s" x="198" y="93">gives each worker its own</text>
+  <text class="s" x="198" y="106">search direction</text>
+  <text class="s" x="198" y="119">120 s timeout → Hydrogen</text>
+
+  <rect class="llm" x="370" y="18" width="150" height="112" rx="5"/>
+  <text class="k" x="380" y="34">3 · WORKERS ×4</text>
+  <text class="t" x="380" y="51">gemini-4-hydrogen</text>
+  <text class="s" x="380" y="67">thinking: low, in parallel</text>
+  <text class="s" x="380" y="80">2 sizings each per round</text>
+  <text class="s" x="380" y="93">JSON schema output,</text>
+  <text class="s" x="380" y="106">clamped to knob ranges</text>
+  <text class="s" x="380" y="119">+ one-line rationale</text>
+
+  <rect class="sim" x="552" y="18" width="162" height="112" rx="5"/>
+  <text class="kg" x="562" y="34">4 · JUDGE</text>
+  <text class="t" x="562" y="51">ngspice × 15 PVT points</text>
+  <text class="s" x="562" y="67">5 corners × 3 temperatures</text>
+  <text class="s" x="562" y="80">loop gain, PM, UGF, current,</text>
+  <text class="s" x="562" y="93">saturation of every device</text>
+  <text class="s" x="562" y="106">≈0.6 s per candidate</text>
+  <text class="s" x="562" y="119">budget: 600 decks per run</text>
+
+  <path class="a" d="M156,74 H184" marker-end="url(#ar)"/>
+  <path class="a" d="M338,74 H366" marker-end="url(#ar)"/>
+  <path class="a" d="M520,74 H548" marker-end="url(#ar)"/>
+
+  <!-- feedback -->
+  <path class="fb" d="M633,130 V152 H263 V134" marker-end="url(#arb)"/>
+  <path class="fb" d="M445,152 V134" marker-end="url(#arb)"/>
+  <text class="lab" x="276" y="166">history (worst corners, failing devices, rationale) → next round</text>
+
+  <!-- row 2 -->
+  <path class="a" d="M633,152 V196" marker-end="url(#ar)"/>
+  <text class="s" x="640" y="182">budget spent</text>
+
+  <rect class="sim" x="552" y="200" width="162" height="96" rx="5"/>
+  <text class="kg" x="562" y="216">5 · RE-CHECK</text>
+  <text class="t" x="562" y="233">Full foundry library</text>
+  <text class="s" x="562" y="249">best design, all 15 points,</text>
+  <text class="s" x="562" y="262">≈9 s per deck instead of 0.2 s</text>
+  <text class="s" x="562" y="275">fresh process</text>
+
+  <rect class="llm" x="370" y="200" width="150" height="96" rx="5"/>
+  <text class="k" x="380" y="216">6 · SIGN-OFF AGENT</text>
+  <text class="t" x="380" y="233">Managed Agent</text>
+  <text class="s" x="380" y="249">Antigravity + Carbon</text>
+  <text class="s" x="380" y="262">writes its own testbench,</text>
+  <text class="s" x="380" y="275">calls run_spice (local)</text>
+  <text class="s" x="380" y="288">verdict vs ours</text>
+
+  <rect class="b" x="188" y="200" width="150" height="96" rx="5"/>
+  <text class="kk" x="198" y="216">7 · VISUALIZER</text>
+  <text class="t" x="198" y="233">viz/report, viz/story</text>
+  <text class="s" x="198" y="249">Bode corner fan</text>
+  <text class="s" x="198" y="262">role-colored schematic</text>
+  <text class="s" x="198" y="275">saturation heatmap,</text>
+  <text class="s" x="198" y="288">trajectory, story slides</text>
+
+  <path class="a" d="M552,248 H524" marker-end="url(#ar)"/>
+  <path class="a" d="M370,248 H342" marker-end="url(#ar)"/>
+
+  <rect class="plan" x="6" y="200" width="150" height="96" rx="5"/>
+  <text class="kp" x="16" y="216">PLANNED, NOT BUILT</text>
+  <text class="t" x="16" y="233">Perception front end</text>
+  <text class="s" x="16" y="249">datasheet PDF → spec</text>
+  <text class="s" x="16" y="262">(Hydrogen)</text>
+  <text class="s" x="16" y="275">schematic → device roles</text>
+  <text class="s" x="16" y="288">(Decisions API)</text>
+  <path d="M81,200 V134" stroke="#9a6200" stroke-width="1.3" stroke-dasharray="4 3" fill="none" marker-end="url(#ar)"/>
+</svg>

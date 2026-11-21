@@ -31,11 +31,16 @@ STYLES = {
     "was": dict(color=MUTED, fontsize=11, fontstyle="italic"),
     "ok": dict(color=INK2, fontsize=11),
     "bad": dict(color=BAD, fontsize=11, fontweight="bold"),
+    "guard": dict(color="#8a5a00", fontsize=11, fontweight="bold"),
     "net": dict(color=INK2, fontsize=11),
     "vdd": dict(color=INK, fontsize=11, fontweight="bold", fontstyle="italic", family=["Liberation Serif"]),
     "title": dict(color=INK, fontsize=15, fontweight="bold"),
     "legend": dict(color=INK, fontsize=12),
     "note": dict(color=INK2, fontsize=11),
+    # compact (story) mode: role names only, projector-sized
+    "cdev": dict(color=INK, fontsize=19, fontweight="bold"),
+    "cnet": dict(color=INK2, fontsize=17),
+    "cval": dict(color=INK2, fontsize=16),
 }
 ROW = 14      # label line pitch (pt)
 
@@ -133,8 +138,10 @@ def _eng(v, unit):
 
 
 def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: dict | None = None,
-                   name: str = "design", ref_name: str = "default"):
-    """params: knob dict; er: its evaluation (for margins); ref_params: show 'was ...' where sizes differ."""
+                   name: str = "design", ref_name: str = "default", compact: bool = False):
+    """params: knob dict; er: its evaluation (for margins); ref_params: show 'was ...' where sizes differ.
+    compact=True: role names only in large type, no title / legend / footnote (story page).
+    Saturation requirement shown = datasheet spec (red if missed) and guard band (amber note) when er.guard."""
     p = oa.clamp(params)
     ref = oa.clamp(ref_params) if ref_params is not None else None
     _prune_fonts()
@@ -144,6 +151,8 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
 
     def lines(dev):
         role, note = info[dev]
+        if compact:
+            return [(ROLE_SHORT[role] + (f" ({note})" if note in ("cascode",) else ""), "cdev")], False
         out = [(f"{dev} · {ROLE_SHORT[role]}" + (f" {note}" if note and role in ("tail", "sink") else ""),
                 "device"), (size_str(p, role), "size")]
         if ref is not None and size_str(ref, role) != size_str(p, role):
@@ -155,21 +164,32 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
                 x, m, c, t = wm
                 bad = x < 0
                 need = oa.SAT_MARGIN[role] * 1e3
+                need_g = oa.sat_required(role, True) * 1e3
                 txt = f"margin {m * 1e3:.0f} mV · {pt_label(c, t)}"
                 if bad:
                     txt = ("✗ triode " if m < 0 else f"✗ < {need:.0f} mV: ") + f"{m * 1e3:.0f} mV · {pt_label(c, t)}"
-                out.append((txt, "bad" if bad else "ok"))
+                elif er.guard and m < need_g / 1e3:
+                    txt = f"⚠ in guard band (< {need_g:.0f} mV): {m * 1e3:.0f} mV · {pt_label(c, t)}"
+                out.append((txt, "bad" if bad else "guard" if txt.startswith("⚠") else "ok"))
         return out, bad
 
     def fet(kind, x, y, gate, dev, side=None):
         ln, bad = lines(dev)
         return s.role_fet(kind, x, y, gate, info[dev][0], ln, bad, side)
 
+    NET = "cnet" if compact else "net"
+
     def gate_net(g, side, label):
         dx = -12 if side == "left" else 12
         s.wire(g, (g[0] + dx, g[1]))
-        s.text((g[0] + dx + (-3 if side == "left" else 3), g[1]), label, "net",
+        if compact and label.startswith("Vbias"):
+            label = "bias"
+        s.text((g[0] + dx + (-3 if side == "left" else 3), g[1]), label, NET,
                ha="right" if side == "left" else "left")
+
+    def net_label(*a, **kw):   # internal net names: hidden in compact mode
+        if not compact:
+            s.text(*a, **kw)
 
     # ---------------- stage 1: NMOS pair, PMOS mirror, cascoded tail
     XL, XR = 0, 270
@@ -185,7 +205,7 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
     s.dot((xd, pd["gate"][1]))
     s.wire((xd, pd["gate"][1]), (xd, 78), (XL, 78))
     s.dot((XL, 78))
-    s.text((XL - 6, 86), "net9", "net", ha="right")
+    net_label((XL - 6, 86), "net9", "net", ha="right")
     s.wire(pd["drain"], (XL, YN))
     s.wire(po["drain"], (XR, YN))
     nd = fet("n", XL, YN, "left", "NM0", side="right")
@@ -195,7 +215,7 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
     s.wire(nd["source"], (XL, YT - 18), (XR, YT - 18), no["source"])
     s.wire((XT, YT - 18), (XT, YT))
     s.dot((XT, YT - 18))
-    s.text((XT - 52, YT - 12), "net10", "net", ha="right", va="top")
+    net_label((XT - 52, YT - 12), "net10", "net", ha="right", va="top")
     t1 = fet("n", XT, YT, "left", "NM2")
     gate_net(t1["gate"], "left", "Vbias<3>")
     s.wire(t1["source"], (XT, YT + GAP))
@@ -208,7 +228,7 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
     xs = XR + 275
     xb = xs - 140
     s.dot((XR, y1))
-    s.text((XR + 60, y1 + 6), "net1", "net", va="top")
+    net_label((XR + 60, y1 + 6), "net1", "net", va="top")
     s.vdd((xs, YP))
     pm = fet("p", xs, YP, "left", "PM2", side="right")
     s.wire((XR, y1), (xb, y1))
@@ -216,12 +236,14 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
     s.dot((xb, y1))
     s.wire((xb, y1), (xb + 9, y1))
     s.res((xb + 9, y1), (xb + 45, y1))
-    s.text((xb + 27, y1 - 30), "Rz", "device", ha="center")
-    s.text((xb + 27, y1 - 16), _eng(p["Rz"], "Ω"), "size", ha="center")
+    s.text((xb + 27, y1 - 30 if not compact else y1 - 18), "Rz", "cdev" if compact else "device", ha="center")
+    if not compact:
+        s.text((xb + 27, y1 - 16), _eng(p["Rz"], "Ω"), "size", ha="center")
     s.wire((xb + 45, y1), (xb + 72, y1))
     s.cap((xb + 72, y1), (xb + 108, y1))
-    s.text((xb + 90, y1 - 30), "Cc", "device", ha="center")
-    s.text((xb + 90, y1 - 16), _eng(p["Cc"], "F"), "size", ha="center")
+    s.text((xb + 90, y1 - 30 if not compact else y1 - 18), "Cc", "cdev" if compact else "device", ha="center")
+    if not compact:
+        s.text((xb + 90, y1 - 16), _eng(p["Cc"], "F"), "size", ha="center")
     s.wire((xb + 108, y1), (xs, y1))
     s.dot((xs, y1))
     s.wire(pm["drain"], (xs, y1))
@@ -236,13 +258,15 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
     xo = xs + 170
     s.wire((xs, y1), (xo + 30, y1))
     s.dot((xo, y1))
-    s.text((xo + 34, y1), "vout", "net")
+    s.text((xo + 34, y1 - 16) if compact else (xo + 34, y1), "out" if compact else "vout", NET)
     s.cap((xo, y1), (xo, y1 + 36))
-    s.text((xo + 16, y1 + 12), "CL", "device")
-    s.text((xo + 16, y1 + 27), "500 fF", "size")
+    s.text((xo + 16, y1 + 12), "CL", "cdev" if compact else "device")
+    s.text((xo + 16, y1 + 27 if not compact else y1 + 32), "500 fF", "cval" if compact else "size")
     s.gnd((xo, y1 + 36))
     # passive labels from Sheet._passive_label use kinds 'device'/'size' -> fine with our STYLES
 
+    if compact:
+        return s.render()
     # ---------------- title, legend, footnote
     x0 = XL - 150
     s.text((x0, -84), f"{name}: signal-path devices colored by role", "title", va="bottom")
@@ -250,11 +274,12 @@ def draw_schematic(params: dict, er: oa.EvalResult | None = None, ref_params: di
     for role in ("in", "load", "tail", "drv", "sink"):
         lx = s.legend_swatch(lx, -52, ROLE_COLOR[role], label=ROLE_LABEL[role])
     if er is not None:
-        s.legend_swatch(lx, -52, "#ffffff", edge=BAD, label="misses saturation margin")
+        lx = s.legend_swatch(lx, -52, "#ffffff", edge=BAD, label="misses saturation margin")
     foot = [f"Sizes: m × W/L in µm (sky130).  Ibias = {_eng(p['Ibias'], 'A')}; bias network frozen at published sizes."]
     if er is not None:
-        foot.append(f"margin = |Vds| − |Vdsat|, worst of {len(er.points)} PVT points; required ≥ 50 mV for "
-                    "input pair / load / driver, ≥ 0 (saturated) for tail and sink.")
+        foot.append(f"margin = |Vds| − |Vdsat|, worst of {len(er.points)} PVT points; spec ≥ "
+                    f"{oa.SAT_MARGIN['in'] * 1e3:.0f} mV for input pair / load / driver, ≥ 0 (saturated) for tail and sink"
+                    + (f"; guard band +{oa.SAT_GUARD_V * 1e3:.0f} mV on every role." if er.guard else "."))
     if ref is not None:
         foot.append(f"'was' = size in {ref_name}.")
     for i, t in enumerate(foot):

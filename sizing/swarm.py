@@ -39,10 +39,15 @@ FALLBACK_TIMEOUT = 90.0
 WORKER_MODEL = "gemini-4-hydrogen"
 RUN_ROOT = oa.ROOT / "runs" / "swarm"
 
-# knob -> (display unit name, factor from SI to display unit)
-UNITS = {"W_in": ("um", 1e6), "L_in": ("um", 1e6), "W_load": ("um", 1e6), "L_load": ("um", 1e6),
-         "W_tail": ("um", 1e6), "W_drv": ("um", 1e6), "L_drv": ("um", 1e6), "W_sink": ("um", 1e6),
-         "Ibias": ("uA", 1e6), "Cc": ("pF", 1e12), "Rz": ("kohm", 1e-3)}
+# knob -> (display unit name, factor from SI to display unit), derived from the knob name
+class _Units(dict):
+    def __missing__(self, k):
+        if k.startswith(("W_", "L_")):
+            return ("um", 1e6)
+        return {"Ibias": ("uA", 1e6), "Cc": ("pF", 1e12), "Rz": ("kohm", 1e-3)}[k]
+
+
+UNITS = _Units()
 
 
 def to_display(p: dict) -> dict:
@@ -51,7 +56,8 @@ def to_display(p: dict) -> dict:
 
 def from_display(d: dict) -> dict:
     out = {}
-    for k, (u, f) in UNITS.items():
+    for k in oa.SPACE:
+        u, f = UNITS[k]
         key = f"{k}_{u}"
         if key in d and d[key] is not None:
             out[k] = float(d[key]) / f
@@ -61,9 +67,9 @@ def from_display(d: dict) -> dict:
 CIRCUIT_CARD = """\
 CIRCUIT: two-stage Miller op-amp, SkyWater SKY130, VDD = 1.8 V, simulated in ngspice.
 Measured in a unity-gain loop-gain (stability) testbench, VCM = 0.9 V, load CL = 500 fF.
-Stage 1: NMOS differential pair (role "in", nfet_01v8) with a PMOS current-mirror load
+Stage 1: NMOS differential pair (role "in", nfet_01v8_lvt) with a PMOS current-mirror load
   (role "load", pfet_01v8_lvt), fed by an NMOS wide-swing cascode tail current source
-  (role "tail": two stacked nfet_01v8 devices, multiplier m=2).
+  (role "tail": two stacked nfet_01v8_lvt devices, multiplier m=2).
 Stage 2: PMOS common-source driver (role "drv", pfet_01v8_lvt, m=3) with an NMOS wide-swing
   cascode current-sink load (role "sink": two stacked nfet_01v8_lvt devices, m=3).
 Compensation: Miller capacitor Cc in series with nulling resistor Rz, from stage-1 output to vout.
@@ -79,6 +85,61 @@ PVT: 15 points = process corners {tt, ff, ss, sf, fs} x temperature {-40, 27, 12
 Note: in this PDK build the corner LABELS sf/fs behave swapped relative to their names;
   reason from the measured numbers, not from corner names.
 """
+
+
+_COMMON_TAIL = """Stage 2: PMOS common-source driver (role "drv", pfet_01v8_lvt, m={M2}) with an NMOS wide-swing
+  cascode current-sink load (role "sink": two stacked nfet_01v8_lvt devices, m={M2}).
+Compensation: Miller capacitor Cc in series with nulling resistor Rz, from stage-1 output to vout.
+Bias: a FROZEN bias network (not tunable) mirrors Ibias into all NMOS wide-swing cascode gates
+  (Vbias_3 / Vbias_4) and the PMOS cascode gate (Vbias_2); its NMOS reference is W = 5 um,
+  L = 0.3 um, and it was designed around Ibias = 20 uA. Devices that mirror it (tail, nsink, sink)
+  keep L = 0.3 um, so their W sets their current. PMOS cascodes keep L = 0.7 um.
+Saturation rule (design target incl. guard band): every signal-path device must have
+  |Vds| - |Vdsat| >= {SAT_HI} mV, except the bottom/cascode devices of the wide-swing NMOS current
+  sources (roles tail, nsink, sink) which need >= {SAT_LO} mV, at EVERY PVT point.
+PVT: 15 points = process corners {tt, ff, ss, sf, fs} x temperature {-40, 27, 125} C.
+Note: in this PDK build the corner LABELS sf/fs behave swapped relative to their names;
+  reason from the measured numbers, not from corner names.
+All transistors are low-Vt (nfet_01v8_lvt / pfet_01v8_lvt).
+"""
+
+CARDS = {"diff": CIRCUIT_CARD}
+CARDS["fc"] = """\
+CIRCUIT: two-stage op-amp with a FOLDED-CASCODE first stage, SkyWater SKY130, VDD = 1.8 V, ngspice.
+Measured in a unity-gain loop-gain (stability) testbench, VCM = 0.9 V, load CL = 1 pF.
+Stage 1 (folded cascode, single-ended output): NMOS differential pair (role "in"). Its drains fold
+  into the sources of PMOS cascodes (role "pcas", gate at fixed bias Vbias_2). Above each fold node
+  are PMOS current sources (role "psrc": four devices, two per side) whose gates are driven from the
+  left branch, so they also act as the mirror that makes the output single-ended; their current is
+  set by KCL (tail/2 + the NMOS sink current per side), their SIZE sets their Vsg and headroom.
+  Below the PMOS cascodes are NMOS wide-swing cascode current sinks (role "nsink": two stacked
+  devices per side). Tail: NMOS wide-swing cascode current source with two parallel branches
+  (role "tail").
+  Approximate currents: I_tail ~= Ibias * 2 * W_tail / 5 um ; each nsink side ~= Ibias * W_nsink / 5 um ;
+  I_sink(stage 2) ~= Ibias * 3 * W_sink / 5 um.
+  Core current i_core = I_tail + both nsink sides + stage-2 sink (bias network not counted).
+""" + _COMMON_TAIL.replace("{M2}", "3")
+CARDS["tele"] = """\
+CIRCUIT: two-stage op-amp with a TELESCOPIC-CASCODE first stage, SkyWater SKY130, VDD = 1.8 V, ngspice.
+Measured in a unity-gain loop-gain (stability) testbench, VCM = 0.9 V, load CL = 1 pF.
+Stage 1 (telescopic cascode, single-ended output): NMOS differential pair (role "in") with NMOS
+  cascodes stacked on top (role "ncas", gate at Vbias5), loaded by a cascoded PMOS current mirror:
+  mirror devices at the top (role "load", gates from the left branch) and PMOS cascodes below them
+  (role "pcas", gate at fixed bias Vbias_2). Tail: NMOS wide-swing cascode current source with two
+  parallel branches (role "tail").
+  Vbias5 comes from a FROZEN replica circuit inside the amplifier: a 1 um-wide copy of the input
+  device biased at VCM with ~Ibias/5 of current, i.e. it assumes the input pair runs at the
+  published current density (~4 uA per um of W_in at L_in = 0.3 um). If the input pair's current
+  density or L changes, Vbias5 no longer tracks, and the input pair / NMOS cascodes can lose headroom.
+  Approximate currents: I_tail ~= Ibias * 2 * W_tail / 5 um ; I_sink(stage 2) ~= Ibias * 6 * W_sink / 5 um.
+  Core current i_core = I_tail + stage-2 sink (bias network and replica not counted).
+""" + _COMMON_TAIL.replace("{M2}", "6")
+
+
+def _card() -> str:
+    hi = min(oa.sat_required(r) for r, v in oa.SAT_MARGIN.items() if v > 0)
+    lo = min(oa.sat_required(r) for r in oa.SAT_MARGIN)
+    return (CARDS[oa.CIRCUIT].replace("{SAT_HI}", f"{hi*1e3:.0f}").replace("{SAT_LO}", f"{lo*1e3:.0f}"))
 
 
 CIRCUIT_CARD = CIRCUIT_CARD.replace("{SAT_HI}", f"{oa.sat_required('in')*1e3:.0f}").replace(
@@ -351,7 +412,7 @@ class Swarm:
         prompt = f"""You are the lead analog designer directing {self.n_workers} junior designers who each propose
 transistor sizings. A SPICE simulator judges every proposal at all 15 PVT points; you never judge pass/fail yourself.
 
-{CIRCUIT_CARD}
+{_card()}
 TUNABLE KNOBS (display units):
 {knob_table()}
 
@@ -381,7 +442,7 @@ ways to reach a passing design; at least one should make bold moves and one care
         prompt = f"""You are an analog circuit designer proposing transistor sizings. A SPICE simulator will judge
 each proposal at all 15 PVT points.
 
-{CIRCUIT_CARD}
+{_card()}
 TUNABLE KNOBS (display units; values outside the range are clipped):
 {knob_table()}
 
@@ -452,10 +513,11 @@ Give each a one-sentence rationale."""
                 stall = 0
         passed = [e for e in self.history if e.er.passed]
         best = self.best()[0]
-        recheck = oa.evaluate(best.params, spec=self.spec, lib="full").passed if best.er.passed else None
+        recheck, recheck_fail = (oa.recheck_full(best.params, spec=self.spec) if best.er.passed
+                                 else (None, []))
         summary = {"run_id": self.run_id, "candidates": len(self.history), "decks": self.budget.used,
                    "success": bool(passed), "candidates_to_first_pass": passed[0].n if passed else None,
-                   "best_n": best.n, "best_passed": best.er.passed, "recheck_full_lib": recheck,
+                   "best_n": best.n, "best_passed": best.er.passed, "recheck_full_lib": recheck, "recheck_failures": recheck_fail,
                    "guard_band": {"metrics": oa.GUARD, "sat_v": oa.SAT_GUARD_V},
                    "n_passed_target": len(passed),
                    "n_passed_nominal_spec": sum(e.er.passed_nominal for e in self.history),
@@ -465,7 +527,8 @@ Give each a one-sentence rationale."""
                    "llm_calls": self.llm.calls, "tokens": self.llm.tokens,
                    "architect_calls": self.arch_log,
                    "wall_s": round(time.perf_counter() - t0, 1),
-                   "models": {"architect": ARCHITECT_MODEL, "worker": WORKER_MODEL}}
+                   "models": {"architect": ARCHITECT_MODEL, "worker": WORKER_MODEL},
+                   "circuit": oa.CIRCUIT}
         (self.dir / "summary.json").write_text(json.dumps(summary, indent=1))
         self._arch_pool.shutdown(wait=False, cancel_futures=True)
         return summary
@@ -480,7 +543,9 @@ def main() -> None:
     ap.add_argument("--dry", action="store_true")
     ap.add_argument("--run-id")
     ap.add_argument("--arch-timeout", type=float, default=ARCH_TIMEOUT)
+    ap.add_argument("--circuit", default="diff", choices=list(oa.CIRCUITS))
     a = ap.parse_args()
+    oa.use(a.circuit)
     globals()["ARCH_TIMEOUT"] = a.arch_timeout
     if not a.dry and not os.environ.get("GEMINI_API_KEY"):
         env = oa.ROOT / ".env"

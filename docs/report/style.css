@@ -1,0 +1,155 @@
+/* Print stylesheet for the presenter briefing. Rendered by headless Chromium (docs/report/build.py). */
+:root {
+  --ink: #1b1b1a;
+  --ink-2: #4a4945;
+  --ink-3: #77766f;
+  --rule: #d9d7cf;
+  --tint: #f4f3ee;
+  --accent: #1f5fae;
+  --accent-tint: #e8f0fa;
+  --good: #1d7a3a;
+  --good-tint: #e6f4ea;
+  --warn: #9a6200;
+  --warn-tint: #fdf3dc;
+  --bad: #b3261e;
+  --bad-tint: #fbe9e7;
+  --s-swarm: #2a78d6;
+  --s-tpe: #eb6834;
+  --s-gp: #1baf7a;
+  --s-random: #eda100;
+}
+
+@page {
+  size: Letter;
+  margin: 17mm 18mm 19mm 18mm;
+  @bottom-center {
+    content: counter(page);
+    font: 9pt "Noto Sans", "DejaVu Sans", sans-serif;
+    color: #77766f;
+  }
+  @bottom-left {
+    content: "Presenter briefing · Gemini 4 NYC hackathon";
+    font: 8pt "Noto Sans", "DejaVu Sans", sans-serif;
+    color: #9a988f;
+  }
+}
+@page :first {
+  @bottom-center { content: none; }
+  @bottom-left { content: none; }
+}
+
+html { background: #fff; }
+body {
+  margin: 0;
+  font-family: "Noto Serif", "DejaVu Serif", Georgia, serif;
+  font-size: 10.6pt;
+  line-height: 1.42;
+  color: var(--ink);
+  background: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  hyphens: auto;
+}
+
+h1, h2, h3, h4, .sans, table, figcaption, .callout-title, .kicker, .toc, .qa-q, .tag {
+  font-family: "Noto Sans", "DejaVu Sans", sans-serif;
+}
+h1 { font-size: 21pt; line-height: 1.15; margin: 0 0 6pt; letter-spacing: -0.01em; }
+h2 {
+  font-size: 15pt; margin: 20pt 0 6pt; padding-top: 4pt;
+  border-top: 2px solid var(--ink); break-after: avoid;
+}
+h2 .num { color: var(--accent); margin-right: 6pt; }
+h3 { font-size: 11.6pt; margin: 13pt 0 3pt; break-after: avoid; color: var(--ink); }
+h4 { font-size: 10.4pt; margin: 9pt 0 2pt; break-after: avoid; color: var(--ink-2); }
+h2 + p, h3 + p, h4 + p { margin-top: 2pt; }
+p { margin: 0 0 6.5pt; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 7pt; padding-left: 16pt; }
+li { margin: 0 0 2.5pt; }
+code, .mono { font-family: "DejaVu Sans Mono", monospace; font-size: 8.8pt; }
+code { background: var(--tint); padding: 0 2px; border-radius: 2px; }
+a { color: var(--accent); text-decoration: none; }
+strong { font-weight: 700; }
+.muted { color: var(--ink-3); }
+.small { font-size: 9pt; }
+
+/* part dividers */
+.part {
+  break-before: page;
+  margin: 0 0 10pt;
+  padding: 10pt 0 8pt;
+  border-bottom: 1px solid var(--rule);
+}
+.part .kicker { font-size: 9pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.part h1 { margin-top: 2pt; }
+.part p { color: var(--ink-2); margin: 0; }
+.pagebreak { break-before: page; }
+.keep { break-inside: avoid; }
+
+/* cover */
+.cover { height: 236mm; display: flex; flex-direction: column; }
+.cover .kicker { font-size: 9.5pt; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin-top: 20mm; }
+.cover h1 { font-size: 28pt; margin: 6pt 0 10pt; max-width: 150mm; }
+.cover .lede { font-size: 12.5pt; color: var(--ink-2); max-width: 150mm; line-height: 1.45; }
+.cover .meta { margin-top: auto; font-family: "Noto Sans", sans-serif; font-size: 9pt; color: var(--ink-3); border-top: 1px solid var(--rule); padding-top: 6pt; }
+.cover .meta b { color: var(--ink-2); }
+.toc { margin: 14mm 0 0; font-size: 10pt; max-width: 150mm; }
+.toc div { display: flex; gap: 8pt; padding: 2.5pt 0; border-bottom: 1px dotted var(--rule); }
+.toc .p { color: var(--accent); font-weight: 700; width: 18pt; }
+.toc .d { color: var(--ink-3); margin-left: auto; font-size: 8.8pt; }
+
+/* stat tiles */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7pt; margin: 8pt 0 10pt; break-inside: avoid; }
+.tile { border: 1px solid var(--rule); border-radius: 4px; padding: 6pt 8pt 6pt; background: #fff; }
+.tile .v { font-family: "Noto Sans", sans-serif; font-size: 17pt; font-weight: 700; line-height: 1.1; color: var(--ink); }
+.tile .v small { font-size: 10pt; font-weight: 600; color: var(--ink-2); }
+.tile .l { font-family: "Noto Sans", sans-serif; font-size: 8.2pt; color: var(--ink-2); line-height: 1.3; margin-top: 2pt; }
+
+/* callouts */
+.callout { border-left: 3px solid var(--accent); background: var(--accent-tint); padding: 6pt 9pt 3pt; margin: 8pt 0 10pt; break-inside: avoid; border-radius: 0 3px 3px 0; }
+.callout.warn { border-color: var(--warn); background: var(--warn-tint); }
+.callout.good { border-color: var(--good); background: var(--good-tint); }
+.callout.pending { border: 1.5px dashed var(--ink-3); background: var(--tint); border-left-width: 1.5px; border-radius: 3px; }
+.callout-title { font-weight: 700; font-size: 9.6pt; margin-bottom: 2pt; letter-spacing: 0.01em; }
+.callout p, .callout li { font-size: 10pt; }
+.tag { display: inline-block; font-size: 7.6pt; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.5pt 4pt; border-radius: 2px; vertical-align: 1pt; }
+.tag.pending { background: #e7e5de; color: var(--ink-2); }
+.tag.planned { background: var(--warn-tint); color: var(--warn); }
+.tag.built { background: var(--good-tint); color: var(--good); }
+
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: 8.6pt; margin: 4pt 0 9pt; break-inside: avoid; line-height: 1.3; }
+th { text-align: left; font-weight: 700; color: var(--ink-2); border-bottom: 1.2px solid var(--ink); padding: 3pt 5pt; vertical-align: bottom; }
+td { border-bottom: 1px solid var(--rule); padding: 2.6pt 5pt; vertical-align: top; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.group td { background: var(--tint); font-weight: 700; color: var(--ink-2); }
+td.pass { color: var(--good); font-weight: 700; }
+td.fail { color: var(--bad); font-weight: 700; }
+td.pend { color: var(--ink-3); font-style: italic; }
+table.tight td, table.tight th { padding: 2pt 4pt; }
+table.def td:first-child { font-weight: 700; white-space: nowrap; width: 26%; }
+table.comp td:first-child { white-space: nowrap; width: 31%; }
+table caption, .tcap { caption-side: top; text-align: left; font-family: "Noto Sans", sans-serif; font-size: 8.8pt; color: var(--ink-2); padding-bottom: 3pt; }
+.tcap b { color: var(--ink); }
+
+/* figures */
+figure { margin: 8pt 0 11pt; break-inside: avoid; }
+figure img, figure svg { display: block; width: 100%; height: auto; }
+figure.narrow img, figure.narrow svg { width: 82%; margin: 0 auto; }
+figure.half img, figure.half svg { width: 64%; margin: 0 auto; }
+figcaption { font-size: 8.6pt; color: var(--ink-2); line-height: 1.35; margin-top: 4pt; }
+figcaption b { color: var(--ink); }
+
+/* two columns of prose for glossary */
+.cols2 { column-count: 2; column-gap: 14pt; }
+.cols2 p { break-inside: avoid; font-size: 9.6pt; margin-bottom: 4.5pt; }
+
+/* Q&A */
+.qa { break-inside: avoid; margin: 0 0 8pt; padding-left: 9pt; border-left: 2px solid var(--rule); }
+.qa-q { font-weight: 700; font-size: 10pt; margin-bottom: 1.5pt; }
+.qa p { margin-bottom: 3pt; }
+
+.pitch { font-size: 11.4pt; line-height: 1.55; background: var(--tint); padding: 10pt 12pt; border-radius: 4px; break-inside: avoid; }
+.eq { font-family: "DejaVu Serif", serif; font-style: italic; text-align: center; margin: 5pt 0 8pt; font-size: 10.6pt; }
+blockquote { margin: 6pt 0 9pt; padding: 4pt 10pt; border-left: 3px solid var(--ink-3); color: var(--ink-2); font-size: 9.8pt; break-inside: avoid; }
+blockquote .src { display: block; font-family: "Noto Sans", sans-serif; font-size: 8.2pt; color: var(--ink-3); margin-top: 3pt; }

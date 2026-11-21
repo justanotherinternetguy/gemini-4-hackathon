@@ -1,0 +1,7 @@
+{
+ "run": "seed0",
+ "passed_full_lib_nominal_spec": true,
+ "failures": [],
+ "seconds": 59.3,
+ "note": "re-run by docs/report builder prep; guard=False (seed0 ran without guard band)"
+}

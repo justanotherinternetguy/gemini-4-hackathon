@@ -77,10 +77,12 @@ def run(sampler: str = "tpe", seed: int = 0, candidates: int = 40, spec: dict | 
     best = min(passed, key=lambda h: h["worst"]["i_core_a"]) if passed else None
     recheck = None
     if best:   # independent re-check on the full PDK library
-        recheck = oa.evaluate(best["params"], spec=spec, lib="full").passed
+        recheck = oa.recheck_full(best["params"], spec=spec)[0]
     summary = {"sampler": sampler, "seed": seed, "candidates": candidates,
                "decks": budget.used, "success": bool(passed), "recheck_full_lib": recheck,
                "candidates_to_first_pass": passed[0]["n"] if passed else None,
+               "guard_band": {"metrics": oa.GUARD, "sat_v": oa.SAT_GUARD_V},
+               "n_passed_target": len(passed),
                "best_i_core_uA": best["worst"]["i_core_a"] * 1e6 if best else None,
                "best_params": best["params"] if best else None,
                "wall_s": round(time.perf_counter() - t0, 1)}
@@ -95,11 +97,14 @@ def main() -> None:
     ap.add_argument("--sampler", nargs="+", default=["tpe"], choices=["tpe", "gp", "random"])
     ap.add_argument("--seeds", type=int, nargs="+", default=[0])
     ap.add_argument("--candidates", type=int, default=40)
+    ap.add_argument("--tag", default="guard")
+    ap.add_argument("--circuit", default="diff", choices=list(oa.CIRCUITS))
     a = ap.parse_args()
+    oa.use(a.circuit)
     for s in a.sampler:
         for seed in a.seeds:
-            r = run(s, seed, a.candidates)
-            print(json.dumps({k: v for k, v in r.items() if k != "best_params"}))
+            r = run(s, seed, a.candidates, tag=a.tag)
+            print(json.dumps({k: v for k, v in r.items() if k != "best_params"}), flush=True)
             if r["best_params"]:
                 print("   best:", {k: f"{v:.3g}" for k, v in r["best_params"].items()})
 

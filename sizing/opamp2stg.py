@@ -6,9 +6,9 @@ import time: each signal-path transistor's shared `Wn/Ln_/Wp/Lp` becomes a per-r
 The bias subcircuits (Bias_gen, Cascode_bias) stay frozen at their published sizes.
 
 Knobs (SI units, same convention as the source netlist):
-  W_in, L_in       input pair            (nfet_01v8,      XI7.XNM0/XNM1)
+  W_in, L_in       input pair            (nfet_01v8_lvt,  XI7.XNM0/XNM1)
   W_load, L_load   mirror load           (pfet_01v8_lvt,  XI7.XPM0/XPM1)
-  W_tail           tail + its cascode    (nfet_01v8, m=2, XI7.XNM3/XNM2)  L fixed = Ln_
+  W_tail           tail + its cascode    (nfet_01v8_lvt, m=2, XI7.XNM3/XNM2)  L fixed = Ln_
   W_drv, L_drv     stage-2 driver        (pfet_01v8_lvt, m=3, XI6.XPM2)
   W_sink           stage-2 sink + casc.  (nfet_01v8_lvt, m=3, XI6.XNM4/XNM5) L fixed = Ln_
   Ibias, Cc, Rz
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import math
 import re
 import subprocess
@@ -71,7 +72,7 @@ DEVICE_ROLE = {
 SAT_MARGIN = {"in": 0.05, "load": 0.05, "drv": 0.05, "tail": 0.0, "sink": 0.0}
 
 # knob -> (default from the published design, lo, hi, log-scale?)
-# SKY130 minimums: nfet_01v8 L >= 0.15u, pfet_01v8_lvt L >= 0.35u, W >= 0.42u.
+# All devices are LVT. SKY130 minimums: nfet_01v8_lvt L >= 0.15u, pfet_01v8_lvt L >= 0.35u, W >= 0.42u.
 SPACE: dict[str, tuple[float, float, float, bool]] = {
     "W_in":   (5e-6,   0.5e-6, 100e-6, True),
     "L_in":   (300e-9, 0.15e-6, 4e-6,  True),
@@ -86,6 +87,93 @@ SPACE: dict[str, tuple[float, float, float, bool]] = {
     "Rz":     (3e3,    10.0,   50e3,   True),
 }
 DEFAULTS = {k: v[0] for k, v in SPACE.items()}
+SUPPLY = "VV3"                                   # supply source name in the testbench
+CORE_DEVICES = ("m.xi1.xi7.xnm3.", "m.xi1.xi6.xnm4.")   # bottom devices whose id sum = core current
+CIRCUIT = "diff"
+
+# --------------------------------------------------------------------------- circuit registry
+# Held-out circuits: AMPICBench's other two-stage op-amps (same bias network and class-A second
+# stage, different first stage). Same conventions: per-role W (and L where the device is not a
+# mirror of the frozen bias network), Ibias, Cc, Rz. Defaults = published sizing.
+_OPAMPS = ROOT / "third_party" / "AMPICBench" / "Opamps"
+_W = lambda d: (d, 0.5e-6, 100e-6, True)
+_WM = lambda d: (d, 0.5e-6, 50e-6, True)      # mirror widths (set current)
+_LN = lambda d: (d, 0.15e-6, 4e-6, True)
+_LP = lambda d: (d, 0.35e-6, 4e-6, True)
+_COMMON_TAIL = {"Ibias": (20e-6, 2e-6, 100e-6, True), "Rz": None, "Cc": None}
+
+CIRCUITS = {
+    "diff": dict(
+        src=_OPAMPS / "sim_Opamp_2stg_Diff_ClassA_STB" / "sim_Opamp_2stg_Diff_ClassA_STB.cir",
+        role_map=dict(ROLE_MAP), role_has_l=dict(ROLE_HAS_L), device_role=dict(DEVICE_ROLE),
+        sat_margin=dict(SAT_MARGIN), space=dict(SPACE), supply="VV3",
+        core=("m.xi1.xi7.xnm3.", "m.xi1.xi6.xnm4."), cload=500e-15),
+    "fc": dict(
+        src=_OPAMPS / "sim_Opamp_2stg_FC_ClassA_STB" / "sim_Opamp_2stg_FC_ClassA_STB.cir",
+        role_map={("FC_Amp", "XNM9"): "in", ("FC_Amp", "XNM10"): "in",
+                  ("FC_Amp", "XNM0"): "tail", ("FC_Amp", "XNM1"): "tail",
+                  ("FC_Amp", "XNM4"): "tail", ("FC_Amp", "XNM5"): "tail",
+                  ("FC_Amp", "XPM0"): "psrc", ("FC_Amp", "XPM1"): "psrc",
+                  ("FC_Amp", "XPM2"): "psrc", ("FC_Amp", "XPM3"): "psrc",
+                  ("FC_Amp", "XPM4"): "pcas", ("FC_Amp", "XPM5"): "pcas",
+                  ("FC_Amp", "XNM2"): "nsink", ("FC_Amp", "XNM6"): "nsink",
+                  ("FC_Amp", "XNM3"): "nsink", ("FC_Amp", "XNM8"): "nsink",
+                  ("ClassA_stg_PMOS", "XPM2"): "drv",
+                  ("ClassA_stg_PMOS", "XNM4"): "sink", ("ClassA_stg_PMOS", "XNM5"): "sink"},
+        role_has_l={"in": True, "tail": False, "psrc": True, "pcas": False, "nsink": False,
+                    "drv": True, "sink": False},
+        sat_margin={"in": 0.05, "psrc": 0.05, "pcas": 0.05, "drv": 0.05,
+                    "tail": 0.0, "nsink": 0.0, "sink": 0.0},
+        space={"W_in": _W(5e-6), "L_in": _LN(300e-9), "W_tail": _WM(5e-6),
+               "W_psrc": _W(20e-6), "L_psrc": _LP(700e-9), "W_pcas": _W(20e-6),
+               "W_nsink": _WM(5e-6), "W_drv": _W(20e-6), "L_drv": _LP(700e-9), "W_sink": _WM(5e-6),
+               "Ibias": (20e-6, 2e-6, 100e-6, True), "Cc": (400e-15, 50e-15, 5e-12, True),
+               "Rz": (3e3, 10.0, 50e3, True)},
+        supply="VV4",
+        core=("m.xi1.xi7.xnm4.", "m.xi1.xi7.xnm5.", "m.xi1.xi7.xnm6.", "m.xi1.xi7.xnm8.",
+              "m.xi1.xi6.xnm4."), cload=1e-12),
+    "tele": dict(
+        src=_OPAMPS / "sim_Opamp_2stg_Telescopic_ClassA_STB" / "sim_Opamp_2stg_Telescopic_ClassA_STB.cir",
+        role_map={("Telescopic_Amp", "XNM0"): "in", ("Telescopic_Amp", "XNM1"): "in",
+                  ("Telescopic_Amp", "XNM2"): "ncas", ("Telescopic_Amp", "XNM3"): "ncas",
+                  ("Telescopic_Amp", "XPM2"): "load", ("Telescopic_Amp", "XPM3"): "load",
+                  ("Telescopic_Amp", "XPM0"): "pcas", ("Telescopic_Amp", "XPM1"): "pcas",
+                  ("Telescopic_Amp", "XNM4"): "tail", ("Telescopic_Amp", "XNM5"): "tail",
+                  ("Telescopic_Amp", "XNM6"): "tail", ("Telescopic_Amp", "XNM7"): "tail",
+                  ("ClassA_stg_PMOS", "XPM2"): "drv",
+                  ("ClassA_stg_PMOS", "XNM4"): "sink", ("ClassA_stg_PMOS", "XNM5"): "sink"},
+        role_has_l={"in": True, "ncas": False, "load": True, "pcas": False, "tail": False,
+                    "drv": True, "sink": False},
+        sat_margin={"in": 0.05, "ncas": 0.05, "load": 0.05, "pcas": 0.05, "drv": 0.05,
+                    "tail": 0.0, "sink": 0.0},
+        space={"W_in": _W(5e-6), "L_in": _LN(300e-9), "W_ncas": _W(5e-6),
+               "W_load": _W(20e-6), "L_load": _LP(700e-9), "W_pcas": _W(20e-6), "W_tail": _WM(5e-6),
+               "W_drv": _W(20e-6), "L_drv": _LP(700e-9), "W_sink": _WM(5e-6),
+               "Ibias": (20e-6, 2e-6, 100e-6, True), "Cc": (0.6e-12, 50e-15, 5e-12, True),
+               "Rz": (1.2e3, 10.0, 50e3, True)},
+        supply="VV4",
+        core=("m.xi1.xi7.xnm6.", "m.xi1.xi7.xnm7.", "m.xi1.xi6.xnm4."), cload=1e-12),
+}
+_SUBCKT_INST = {"Diffamp1": "xi7", "FC_Amp": "xi7", "Telescopic_Amp": "xi7", "ClassA_stg_PMOS": "xi6"}
+for _c in CIRCUITS.values():
+    if "device_role" not in _c:
+        _c["device_role"] = {f"m.xi1.{_SUBCKT_INST[sub]}.{inst.lower()}": role
+                             for (sub, inst), role in _c["role_map"].items()}
+
+
+def use(name: str) -> None:
+    """Switch the module to another registered circuit (rebinds module globals)."""
+    global SRC, ROLE_MAP, ROLE_HAS_L, DEVICE_ROLE, SAT_MARGIN, SPACE, DEFAULTS, SUPPLY
+    global CORE_DEVICES, CIRCUIT, TEMPLATE
+    c = CIRCUITS[name]
+    SRC, ROLE_MAP, ROLE_HAS_L = c["src"], c["role_map"], c["role_has_l"]
+    DEVICE_ROLE, SAT_MARGIN, SPACE = c["device_role"], c["sat_margin"], c["space"]
+    DEFAULTS = {k: v[0] for k, v in SPACE.items()}
+    SUPPLY, CORE_DEVICES, CIRCUIT = c["supply"], c["core"], name
+    TEMPLATE = _build_template()
+if os.environ.get("OPAMP_CIRCUIT", "diff") != "diff":
+    use(os.environ["OPAMP_CIRCUIT"])
+    os.environ["OPAMP_CIRCUIT"] = name
 
 
 def clamp(params: dict) -> dict:
@@ -131,7 +219,7 @@ def _build_template() -> str:
     text = "\n".join(out)
     # knob .param line (after the original one so the originals stay defined for the bias nets)
     knob_line = ".param " + " ".join(f"{k}={{{k}}}" for k in SPACE)
-    text = re.sub(r"(?m)^(\.param Cload=.*)$", lambda m: m.group(1) + "\n" + knob_line, text, count=1)
+    text = re.sub(r"(?m)^(\.param .*)$", lambda m: m.group(1) + "\n" + knob_line, text, count=1)
     # replace the control block with one that prints everything to stdout
     control = r"""
 .control
@@ -141,7 +229,7 @@ op
 echo @@OP_BEGIN
 show m : id vds vdsat gm gds
 echo @@OP_END
-print i(VV3)
+print i(@@SUPPLY@@)
 ac dec 50 10 10G
 let lg_v1 = v(net6)
 let lg_i1 = i(Vprb_inj)
@@ -165,7 +253,7 @@ quit
 .endc
 .end
 """
-    text = re.sub(r"(?s)\.control.*", control.strip() + "\n", text)
+    text = re.sub(r"(?s)\.control.*", control.strip().replace("@@SUPPLY@@", SUPPLY) + "\n", text)
     return text
 
 
@@ -289,7 +377,7 @@ def simulate_point(params: dict, corner: str, temp: float, lib: str = "slim",
         pm_raw, gm_db = g("pm_raw"), g("gm_db")
         r.pm_deg = 180.0 + pm_raw if pm_raw is not None else None
         r.gain_margin_db = -gm_db if gm_db is not None else None
-        itot = g(r"i\(vv3\)")
+        itot = g(rf"i\({SUPPLY.lower()}\)")
         r.i_total_a = abs(itot) if itot is not None else None
         if "@@OP_BEGIN" in out:
             block = out.split("@@OP_BEGIN", 1)[1].split("@@OP_END", 1)[0]
@@ -303,10 +391,9 @@ def simulate_point(params: dict, corner: str, temp: float, lib: str = "slim",
                     r.sat_violations.append(path)
                 if role is None and margin < 0:
                     r.bias_triode.append(path)
-            tail = [v["id"] for k, v in r.devices.items() if k.startswith("m.xi1.xi7.xnm3.")]
-            sink = [v["id"] for k, v in r.devices.items() if k.startswith("m.xi1.xi6.xnm4.")]
-            if tail and sink:
-                r.i_core_a = abs(tail[0]) + abs(sink[0])
+            core = [abs(v["id"]) for k, v in r.devices.items() if k.startswith(CORE_DEVICES)]
+            if len(core) == len(CORE_DEVICES):
+                r.i_core_a = sum(core)
         r.ok = (p.returncode == 0 and None not in (r.dc_gain_db, r.ugf_hz, r.pm_deg)
                 and len([d for d in r.devices.values() if d["role"]]) == len(DEVICE_ROLE))
         if not r.ok:
@@ -408,9 +495,18 @@ class EvalResult:
         return d
 
 
+def recheck_full(params: dict, spec: dict | None = None, guard: bool = True) -> tuple[bool, list]:
+    """Independent re-verification on the FULL PDK library (slow: ~9 s per deck), robust to a
+    loaded machine: long per-deck timeout, modest parallelism, one retry for failed sims."""
+    er = evaluate(params, spec=spec, lib="full", guard=guard, timeout=900, jobs=8)
+    if any(not r.ok for r in er.points):
+        er = evaluate(params, spec=spec, lib="full", guard=guard, timeout=1800, jobs=4)
+    return er.passed, er.failures[:6]
+
+
 def evaluate(params: dict, spec: dict | None = None, points=PVT15, lib: str = "slim",
              budget: Budget | None = None, jobs: int = 15, curves: bool = False,
-             guard: bool = True) -> EvalResult:
+             guard: bool = True, timeout: float = 60) -> EvalResult:
     """Judge a design at every PVT point against the spec. With guard=True (default) the
     pass/fail and `failures` use the guard-banded DESIGN TARGET (see GUARD, SAT_GUARD_V);
     `passed_nominal` always reports the bare spec.
@@ -422,7 +518,8 @@ def evaluate(params: dict, spec: dict | None = None, points=PVT15, lib: str = "s
         budget.take(len(points))   # reserve the whole sweep up front
     t0 = time.perf_counter()
     with ThreadPoolExecutor(jobs) as ex:
-        res = list(ex.map(lambda ct: simulate_point(p, ct[0], ct[1], lib, curves=curves), points))
+        res = list(ex.map(lambda ct: simulate_point(p, ct[0], ct[1], lib, timeout=timeout,
+                                                     curves=curves), points))
     er = EvalResult(p, res, target, spec_nominal=nominal, guard=guard)
     er.failures, er.worst = _check(res, target, use_guard_sat=guard)
     nominal_failures, _ = _check(res, nominal, use_guard_sat=False)
