@@ -1,4 +1,4 @@
-"""Proposer + orchestrator swarm for PCB routing repair (PCBWorld).  BUILT, NOT YET RUN.
+"""Proposer + orchestrator swarm for PCB routing repair (PCBWorld).
 
 A two-tier crew working ONE shared board state per round:
 
