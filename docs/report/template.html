@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Analog Sizing Briefing</title>
+<style>{{css}}</style>
+</head>
+<body>
+
+<!-- ================================================================== COVER -->
+<section class="cover">
+  <div class="kicker">Presenter briefing · Gemini 4 NYC hackathon · 21 November 2026</div>
+  <h1>Gemini 4 as an analog designer: what we built, and the circuit basics behind it</h1>
+  <p class="lede">Part A covers the system and its measured results. Part B is a crash course on the analog
+  design ideas the judges will probe: saturation, gain, phase margin, corners. Part C collects likely judge
+  questions with short answers and a 60-second pitch.</p>
+
+  <div class="toc">
+    <div><span class="p">A</span><span>What we built and what the numbers say</span><span class="d">pitch, pipeline, decisions, results, caveats</span></div>
+    <div><span class="p">B</span><span>Analog crash course</span><span class="d">transistor → op-amp → stability → corners → flow</span></div>
+    <div><span class="p">C</span><span>Judge questions, glossary, 60-second pitch</span><span class="d">answers with this project's numbers</span></div>
+  </div>
+
+  <div class="callout pending" style="margin-top:12mm">
+    <div class="callout-title">Pending at build time</div>
+    <ul class="small">{{pending_list}}</ul>
+    <p class="small">The build script reads every result from <code>runs/</code>. Rerun
+    <code>.venv/bin/python -m docs.build_report</code> (about 10 s) when new runs finish.</p>
+  </div>
+
+  <div class="meta">Built <b>{{built}}</b> from <code>docs/report/template.html</code> and the JSON files in <code>runs/</code>.
+  Repository: <code>gemini-4-hackathon</code>. No Gemini API calls were made to build this document.</div>
+</section>
+
+<!-- ================================================================== PART A -->
+<section class="part">
+  <div class="kicker">Part A</div>
+  <h1>What we built</h1>
+  <p>The system, the engineering choices behind it, and the measured results, with caveats.</p>
+</section>
+
+<h2><span class="num">A1</span>The pitch in one paragraph</h2>
+<p>We gave Gemini 4 the job of an analog circuit designer. The circuit is a two-stage op-amp on SkyWater's open
+130 nm process (SKY130). It must meet four specs (phase margin, bandwidth, gain and current) at 15 combinations of
+manufacturing corner and temperature. A <b>Gemini 4 Carbon architect</b> reads the circuit description and every result so far,
+writes a diagnosis in circuit terms, and gives four <b>Gemini 4 Hydrogen workers</b> different search directions. The workers
+propose concrete transistor sizes. The <b>ngspice</b> circuit simulator judges every proposal at all 15 points, so the models
+never decide pass or fail. With the same budget of 40 candidates (600 simulations), the swarm found a passing design in
+{{k_sw_ng}} of {{n_sw_ng}} runs on the bare spec and {{k_sw_g}} of {{n_sw_g}} runs with a safety guard band. The blind optimizers
+we compared against (TPE, GP Bayesian optimization, random search) passed in {{k_bl_ng}} of {{n_bl_ng}} and {{k_bl_g}} of {{n_bl_g}}
+finished runs. Every passing swarm design re-passes on the full, slow foundry model library. A separate Gemini Managed Agent
+writes its own testbench from scratch to check our numbers.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="v">{{k_sw_g}}/{{n_sw_g}}</div><div class="l">swarm runs passing all 15 PVT points with the guard band (TPE: {{k_bl_g}}/{{n_bl_g}})</div></div>
+  <div class="tile"><div class="v">{{med_ftp_sw_ng}} <small>/ {{med_ftp_sw_g}}</small></div><div class="l">median candidates to first pass: bare spec / guard band (budget 40)</div></div>
+  <div class="tile"><div class="v">{{icore_sw_ng_best}} <small>µA</small></div><div class="l">lowest core current found (published design: {{def_icore}} µA, fails every spec)</div></div>
+  <div class="tile"><div class="v">{{cost_mean}}</div><div class="l">mean Gemini cost per 40-candidate run ({{calls_range}} calls)</div></div>
+</div>
+
+<h2><span class="num">A2</span>The pipeline</h2>
+<figure>
+  {{svg_pipeline}}
+  <figcaption><b>Figure 1. The sizing loop.</b> Blue boxes are Gemini calls; green boxes are simulation. The loop runs until 40
+  candidates (600 simulation decks) are spent. The dashed box at the bottom left was in the plan but is not built: today the spec and
+  the map from transistor to role are written by hand.</figcaption>
+</figure>
+
+<p>A <b>deck</b> is one ngspice input file: the circuit, one process corner, one temperature and the measurements. One
+<b>candidate</b> is one full set of transistor sizes, judged with 15 decks. Every method gets 40 candidates, and the published
+starting design counts as candidate 1 for every method.</p>
+
+<ol>
+  <li><b>Inputs.</b> The circuit comes from AMPICBench, a public op-amp benchmark (CC BY-NC 4.0) that ships SKY130 netlists,
+  loop-gain testbenches and published results. We reproduce its published typical-corner numbers (60.59 dB, 125.4 MHz, 31.5°
+  against 60.6 dB, 126 MHz, 31.5°). A short "circuit card" in the prompt explains each transistor's role and the bias rules.</li>
+  <li><b>Architect</b> (<code>gemini-4-carbon</code>, thinking level medium). It sees the circuit card, the knob ranges, the spec
+  and the best six designs so far. It returns a diagnosis and one search direction per worker. It runs once at the start and again,
+  in the background, whenever the best score has not improved for two rounds.</li>
+  <li><b>Workers</b> (<code>gemini-4-hydrogen</code>, thinking level low, four in parallel). Each sees its direction, the three
+  best designs and its own last four attempts, and returns two candidates as schema-checked JSON with a one-sentence rationale.
+  Python clamps every number to the allowed range and drops duplicates.</li>
+  <li><b>Judge</b> (<code>sizing/opamp2stg.evaluate</code>). It writes 15 decks, runs them in parallel and parses loop gain,
+  phase margin, unity-gain frequency, gain margin, core current and the saturation margin of all nine signal-path transistors.
+  A budget counter checks before every deck.</li>
+  <li><b>Re-check.</b> The best design is simulated again at all 15 points with the full foundry library in a fresh evaluation.</li>
+  <li><b>Sign-off agent</b> (<code>sizing/signoff.py</code>). A Gemini Managed Agent (Antigravity agent with Carbon) gets the bare
+  circuit, the schematic image and the spec, but none of our testbench code. It must write its own testbench, calibrate it against
+  the published numbers, then verify the design at all 15 points through one tool, <code>run_spice</code>, which we execute locally.</li>
+  <li><b>Visualizer</b> (<code>viz/report.py</code>, <code>viz/story.py</code>). It produces the figures in this document and a
+  projector-friendly story page.</li>
+</ol>
+
+<h3>Components</h3>
+<table class="comp tight">
+<thead><tr><th>Path</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td class="mono">sim/models/sky130_slim.lib.spice</td><td>Trimmed SKY130 model library: only the transistor types we use, five corners. 0.2 s per simulation instead of 9 s, with identical results.</td></tr>
+<tr><td class="mono">sim/ampic/</td><td>Our ngspice reproduction of the AMPICBench testbench; a sweep script runs 5 corners × 3 temperatures in about 1.5 s.</td></tr>
+<tr><td class="mono">sizing/opamp2stg.py</td><td>Rewrites the netlist into 11 per-role knobs; <code>evaluate()</code> judges a design at 15 PVT points; guard band; budget counter; full-library re-check.</td></tr>
+<tr><td class="mono">sizing/swarm.py</td><td>Carbon architect + 4 Hydrogen workers; logs every prompt, response, candidate and token count to <code>runs/swarm/&lt;id&gt;/</code>.</td></tr>
+<tr><td class="mono">sizing/baseline.py</td><td>Optuna baselines (TPE, GP, random) on the same knobs, budget and judge.</td></tr>
+<tr><td class="mono">sizing/signoff.py</td><td>Managed Agent sign-off verifier with the <code>run_spice</code> tool; compares its numbers with ours point by point.</td></tr>
+<tr><td class="mono">bench/amsbench.py, bo_baseline.py</td><td>Independent runner and BO baselines for AMS-SizingBench (24 SKY130 circuits from the AutoSizer paper), with a fixed spec parser.</td></tr>
+<tr><td class="mono">designs/hand_K.json</td><td>A design we sized by hand reasoning in 11 evaluations; passes on the full library. A human reference point.</td></tr>
+<tr><td class="mono">viz/</td><td>Bode corner fan, role-colored schematic, saturation heatmap, trajectory plot, story page.</td></tr>
+</tbody></table>
+
+<h2><span class="num">A3</span>Key engineering decisions, and why</h2>
+
+<h4>1. A slim model library: 0.2 s per simulation instead of 9 s</h4>
+<p>The full SKY130 library loads every device type in the process. We cut it down to the four transistor types the op-amp uses
+and the five corners. Results match the full library exactly, and one candidate (15 decks in parallel) takes about 0.6 s. At that
+speed simulation is cheap, so the scarce resource is LLM calls, and the fair way to compare methods is the number of simulations.
+We still re-check every final design on the full library, so the speed trick cannot change a verdict.</p>
+
+<h4>2. Per-role knobs, with tail and sink length fixed</h4>
+<p>The original netlist gives every NMOS one shared width and length (and every PMOS another). We split the nine signal-path
+transistors into five roles (input pair, mirror load, tail, stage-2 driver, stage-2 sink) and gave each its own width, plus a length
+for the input pair, load and driver. With Ibias, Cc and Rz that makes 11 knobs. Matched devices read the same parameter, so matching
+comes for free. The tail and sink transistors copy current from a frozen bias network whose reference device is 5 µm × 0.3 µm. A
+current mirror only copies correctly when the lengths match, so their length stays at 0.3 µm and their width sets the current:
+I<sub>tail</sub> ≈ Ibias · 2 · W<sub>tail</sub> / 5 µm and I<sub>sink</sub> ≈ Ibias · 3 · W<sub>sink</sub> / 5 µm.</p>
+
+<h4>3. Saturation rules on every transistor at every corner</h4>
+<p>An amplifier transistor only amplifies when it is in saturation (Part B2). We require |V<sub>DS</sub>| − |V<sub>DSAT</sub>| ≥ 50 mV
+for the input pair, load and driver at all 15 points. The bottom devices of the tail and sink only have to be in saturation (≥ 0 mV),
+because the frozen bias network fixes their headroom: the published design gives them only 23–37 mV at the typical corner. An optimizer
+that skips this check can report a "pass" with a transistor in triode. That is the analog version of reward hacking.</p>
+
+<h4>4. A guard band, because a bare pass can be a pass by 0.5°</h4>
+<p>The best design of our first run (<code>first40</code>) passed with a worst-case phase margin of {{f40_pm}}° and a worst-case
+unity-gain frequency of {{f40_ugf}} MHz, against limits of 60° and 10 MHz. Model error, layout parasitics and random mismatch would eat
+that margin. So the optimizers now aim at a tighter design target: PM ≥ 65°, UGF ≥ 11 MHz, gain ≥ 63 dB, core current ≤ 90 µA, and 10 mV
+extra saturation margin. We report both "passes the target" and "passes the bare spec".</p>
+
+<h4>5. Budget counted in simulations, checked before every deck</h4>
+<p>Every method gets 40 candidates × 15 decks = 600 decks. The counter refuses a deck before it runs, not between rounds. (An audit of a
+published LLM sizing agent found it overshot its budget in 4 of 8 trials because the check ran between rounds.)</p>
+
+<h4>6. Carbon timeout and fallback</h4>
+<p>Carbon is the stronger planner but its latency varies. Our first architect call took {{f40_carbon}} s; later ones took {{lat_c_range}} s,
+against a median of {{lat_h_med}} s for a Hydrogen worker call. The architect now has a 120 s timeout, after which the same prompt goes to
+Hydrogen at thinking level high. Re-plans run in the background so workers never wait. The fallback fired in: {{fallback_runs}}.</p>
+
+<h4>7. Guards against the known ways sizing agents cheat</h4>
+<ul>
+  <li><b>Signed spec parsing.</b> AutoSizer (ICML 2026) checks specs with the regex <code>(\w+)\s*([&gt;&lt;=]+)\s*([\d.]+)</code>, which
+  cannot match a minus sign, so a spec like <code>gain &gt; -5</code> is silently dropped. An independent audit reports this lifted
+  reported success from about 69% to 93–95%; we confirmed the regex ourselves. Our AMS-SizingBench runner parses signs and fails any
+  constraint whose metric is missing.</li>
+  <li><b>The LLM never judges.</b> Pass or fail comes only from ngspice output. A failed simulation counts as a failure.</li>
+  <li><b>All corners, all devices.</b> A typical-corner pass does not count (see the numbers in A4).</li>
+  <li><b>Feasible first.</b> The final design is the lowest-current design among those that pass, never a high-score infeasible one.</li>
+  <li><b>Geometry clamped</b> to SKY130 minimums (NMOS L ≥ 0.15 µm, PMOS L ≥ 0.35 µm, W ≥ 0.5 µm in our ranges).</li>
+  <li><b>Corner-name quirk.</b> In this PDK build the corner labelled <code>sf</code> gives <i>more</i> NMOS current than <code>tt</code>,
+  the opposite of its name. The prompt tells the models to reason from measured numbers, not corner names.</li>
+</ul>
+
+<h2><span class="num">A4</span>Results on the development circuit</h2>
+
+<div class="callout">
+  <div class="callout-title">The task</div>
+  <p>Spec at every one of 15 PVT points (corners tt, ff, ss, sf, fs × −40, 27, 125 °C; supply fixed at 1.8 V; unity-gain feedback;
+  500 fF load): phase margin ≥ 60°, unity-gain frequency ≥ 10 MHz, DC loop gain ≥ 60 dB, core current ≤ 100 µA, all signal-path
+  devices saturated. The <b>published AMPICBench sizing fails</b>: worst phase margin {{def_pm}}° (at {{def_pm_at}}), DC gain
+  {{def_gain}} dB, core current {{def_icore}} µA, and a tail transistor in triode (margin {{def_sat}} mV). Its UGF is {{def_ugf}} MHz,
+  far more bandwidth than needed, bought with stability.</p>
+</div>
+
+<p class="tcap"><b>Table 1.</b> Swarm vs blind optimizers, 40 candidates (600 simulations) per run. "–" in the first-pass list is a run with no pass. The median counts a miss as more than 40.</p>
+{{results_table}}
+{{bl_pending_note}}
+
+<figure>
+  {{ftp_chart}}
+  <figcaption><b>Figure 2. Candidates to the first all-corner pass,</b> one dot per run. Hollow dots on the right are runs that never
+  passed within 40 candidates. Finished baseline passes: {{bl_win_note}}.</figcaption>
+</figure>
+
+<p><b>What the table says.</b> On the bare spec, the swarm passed in every run, typically within the first two rounds (first pass at
+candidates {{ftp_sw_ng}}), and drove the core current down to {{icore_sw_ng_range}} µA. With the guard band the target is harder: the
+swarm still passed in every run, later (candidates {{ftp_sw_g}}), at {{icore_sw_g_range}} µA. The extra current is the price of margin.
+TPE, the default sampler in Optuna and the strongest blind baseline in the published audit, did not find a single passing design in 40 candidates
+in any finished run. Wall time per swarm run was {{wall_sw}} s, against {{wall_tpe}} s for TPE and {{wall_gp}} s for GP.</p>
+
+<p><b>Why the typical corner is not enough.</b> Across the guard-band swarm runs, {{tt_pass}} of {{tt_n}} candidates met the target at the
+typical corner (tt, 27 °C) alone, but only {{all_pass}} of {{tt_n}} met it at all 15 points. Checking only the typical corner would have
+counted more than twice as many "passes".</p>
+
+<p class="tcap"><b>Table 2.</b> Every swarm run. Cost uses introductory list prices (Carbon $2/$10, Hydrogen $1.50/$7.50 per million input/output tokens) and bills thinking tokens as output.</p>
+{{run_table}}
+{{recheck_notes}}
+
+<p><b>A human reference.</b> Before the swarm existed, we sized the circuit by hand reasoning (<code>designs/hand_K.json</code>): 11
+evaluations (165 decks) to a design that passes on the full library, with worst-case phase margin {{hand_pm}}° and core current
+{{hand_icore}} µA. The swarm's bare-spec designs use about a third of that current.</p>
+
+<h3>What the architect actually says</h3>
+<p>From run <code>{{ex_run}}</code>, the Carbon architect's first diagnosis of the published design (verbatim, first sentences):</p>
+<blockquote>{{arch_quote}}<span class="src">runs/swarm/{{ex_run}}/architect.jsonl</span></blockquote>
+<p>It then assigned four directions:</p>
+<ul class="small">{{arch_dirs}}</ul>
+<p>The worker that produced the best design (#{{ex_n}}) wrote: <i>"{{ex_rationale}}"</i> Part B7 explains why widening the input
+pair protects the tail.</p>
+
+<figure>
+  {{fig_bode}}
+  <figcaption><b>Figure 3. Loop gain at all 15 PVT points</b>, run <code>first40</code> (bare spec). Gray: the published design, whose
+  phase at the unity-gain crossing sits near −150° (PM about 30°). Color: best design #39. The swarm traded excess bandwidth for
+  stability: the crossing moved from about 100 MHz down to just above 10 MHz, and the phase there stays above −120°.
+  Source: <code>{{fig_bode_src}}</code>.</figcaption>
+</figure>
+
+<figure>
+  {{fig_schem}}
+  <figcaption><b>Figure 4. Role-colored schematic</b> of the same design: sizes as multiplier × W/L in µm, the published size in gray
+  ("was"), and each device's worst saturation margin with the corner where it occurs. The tail and sink bottom devices sit only a few
+  millivolts above triode at the cold corners; Part B7 explains why. Source: <code>{{fig_schem_src}}</code>.</figcaption>
+</figure>
+
+<figure>
+  {{fig_traj}}
+  <figcaption><b>Figure 5. Search trajectory</b> of run <code>{{traj_run}}</code>: the worst-case value of each metric for every
+  candidate, colored by worker, filled when the candidate passed all 15 points. Red bands fail the spec. Vertical lines mark rounds.
+  Source: <code>{{fig_traj_src}}</code>.</figcaption>
+</figure>
+
+<h3>Is our BO baseline tuned correctly?</h3>
+<p>A fair question when blind search fails. We ran the same Optuna samplers through our independent runner on five AMS-SizingBench
+circuits, at the typical corner only, with 100 simulations and the benchmark's own spec strings. They succeeded in {{ams_k}} of {{ams_n}}
+runs, usually within a few dozen simulations, which is in line with the published audit (TPE about 67% and GP-BO about 60% at 100
+simulations on its harder set). The samplers work. What defeats them on our op-amp is the 15-corner, nine-device saturation feasibility region,
+which is a thin sliver of an 11-dimensional space.</p>
+<p class="tcap"><b>Table 3.</b> AMS-SizingBench, typical corner only, 100 simulations per run, 3 seeds. Cells: passing runs / simulations to first pass per seed.</p>
+{{ams_table}}
+
+<h2><span class="num">A5</span>Independent sign-off by a Managed Agent</h2>
+<p>Our evaluator could share a bug with our optimizer. So a Gemini Managed Agent re-verifies the final design without our code. It gets
+the op-amp and bias subcircuits as a bare netlist (no supply, stimulus, load or measurements), the schematic image, and the spec. It must
+choose its own loop-gain method, first reproduce the circuit authors' published numbers on the published sizing (within 1 dB, 3% and
+1.5°), and only then measure our design at all 15 points. Its single tool, <code>run_spice</code>, runs a deck on our machine with ngspice and the
+full SKY130 library; a filter blocks <code>.lib</code>, <code>.include</code>, <code>.temp</code> and shell lines so the agent cannot
+swap the model files. We compute our own verdict before the agent starts.</p>
+{{signoff_block}}
+
+<h2><span class="num">A6</span>Held-out op-amps</h2>
+<p>Prompts and knob ranges were developed on one circuit, so the real test is a circuit the prompts never saw. A teammate is porting two
+more AMPICBench op-amps with the same parameter names: a folded-cascode two-stage (published 73.9 dB, 71.3 MHz, 32.0° at the typical corner)
+and a telescopic two-stage (81.9 dB, 68.7 MHz, 49.3°). Both fail a 60° target before any optimization: their shipped corner data show phase
+margins of 28–41° and 45–59°, and devices in triode at 7 and 8 of the 15 points.</p>
+{{heldout_block}}
+
+<h2><span class="num">A7</span>Honest caveats</h2>
+<ul>
+  <li><b>Few runs.</b> Three or four runs per method. We report k/n and per-run numbers, not percentages or significance tests.</li>
+  <li><b>One development circuit.</b> The prompts were written while looking at it. Held-out circuits are the fix (A6).</li>
+  <li><b>The swarm gets a prior that the baselines do not.</b> The circuit card tells the models what each transistor does and how the bias
+  currents scale. That knowledge is the point of the method, but it means we compare "LLM with designer knowledge" against blind search.
+  We did not test Bayesian optimization with physics priors (for example, warm-started from a hand design or searching in gm/I<sub>D</sub>
+  space), which could close much of the gap.</li>
+  <li><b>Small budget.</b> 40 candidates favors a method with priors. Blind BO may catch up at 300 or more; we did not run that.</li>
+  <li><b>"PVT" here means process and temperature.</b> Supply voltage stays at 1.8 V. No Monte Carlo mismatch, no layout parasitics, no
+  slew, noise, offset or rejection specs. This is schematic-level sizing.</li>
+  <li><b>Corner labels.</b> <code>sf</code> and <code>fs</code> behave swapped relative to their names in this PDK build. We sweep all five,
+  so the verdicts hold, but per-corner commentary should use the measured numbers.</li>
+  <li><b>Perception front end not built.</b> The datasheet reader and the schematic role labeler (Decisions API) from the plan do not exist yet;
+  the role map and the spec are hand-written. Multimodal input today is the schematic image given to the sign-off agent.</li>
+  <li><b>Hackathon rules unverified.</b> We found no public page for this event; the rubric details came from the brief.</li>
+  <li><b>Cost estimate.</b> Thinking tokens are billed as output in our estimate; prices are introductory and rise on 1 December.</li>
+</ul>
+
+<h2><span class="num">A8</span>What's next</h2>
+<ol>
+  <li>Held-out folded-cascode and telescopic runs with all four methods, three seeds each.</li>
+  <li>Close the perception loop: datasheet PDF → spec card (Hydrogen, cross-checked against the PDF text layer), and schematic image → role map (Decisions API), scored against a written answer key.</li>
+  <li>Robustness: supply corners (±10%), Monte Carlo mismatch on the final design, estimated layout parasitics.</li>
+  <li>A hybrid: let the swarm propose, then let BO refine inside the region the swarm found.</li>
+  <li>Baselines at 3× budget, to show the result does not depend on starving BO.</li>
+</ol>
+
+<!-- ================================================================== PART B -->
+<section class="part">
+  <div class="kicker">Part B</div>
+  <h1>Analog crash course</h1>
+  <p>Enough circuit knowledge to explain the project and answer follow-ups. Every section ends with where it shows up in our numbers.</p>
+</section>
+
+<h2><span class="num">B1</span>Why analog design is different</h2>
+<p>Digital design hides the transistor behind an abstraction: a wire is 0 or 1, a gate only has to switch cleanly, and a synthesis
+tool turns code into a netlist of standard cells. Analog circuits carry information in continuous voltages and currents, so the exact
+operating point of every transistor matters, along with how it drifts with temperature and manufacturing. No analog equivalent of logic
+synthesis exists. A designer picks a topology, chooses the width and length of every transistor and every bias current, and checks the
+result with a circuit simulator (SPICE). That choice of sizes is called <b>sizing</b>, and it is the job our system automates. Analog
+blocks take a small share of a mixed-signal chip's area but a large share of its design time and its test failures.</p>
+
+<h2><span class="num">B2</span>The transistor: a current source controlled by a voltage</h2>
+<p>A MOSFET has a gate, a source and a drain. The gate-source voltage V<sub>GS</sub> controls how much current I<sub>D</sub> flows
+from drain to source. Below the <b>threshold voltage</b> V<sub>TH</sub> almost nothing flows; above it, current grows quickly. The excess
+V<sub>GS</sub> − V<sub>TH</sub> is the <b>overdrive</b> V<sub>OV</sub>. The textbook "square law" says</p>
+<p class="eq">I<sub>D</sub> ≈ ½ · μC<sub>ox</sub> · (W/L) · V<sub>OV</sub><sup>2</sup></p>
+<p>where W is the channel width, L the channel length and μC<sub>ox</sub> a process constant. Wider means more current; longer means less.
+Treat the formula as intuition: modern devices deviate from it, which is why designers use simulation and lookup tables. NMOS transistors
+conduct with the gate above the source; PMOS transistors are the mirror image and sit on the supply side. Our op-amp uses SKY130's
+low-threshold (LVT) 1.8 V devices, <code>nfet_01v8_lvt</code> and <code>pfet_01v8_lvt</code>.</p>
+
+<figure class="narrow">
+  {{svg_idvds}}
+  <figcaption><b>Figure 6. Drain current against drain-source voltage</b> for three gate voltages. Left of the dashed line the transistor
+  is in triode and behaves like a resistor. Right of it, in saturation, the current barely depends on V<sub>DS</sub>, so the device behaves
+  like a current source set by V<sub>GS</sub>. The saturation margin is the distance from the operating point to the boundary.</figcaption>
+</figure>
+
+<h3>Saturation vs triode, and why the margin matters</h3>
+<p>For amplification a transistor must be in <b>saturation</b>: V<sub>DS</sub> greater than V<sub>DSAT</sub> (roughly the overdrive). There
+the drain current depends on the gate and hardly at all on the drain, which is what makes gain possible. If V<sub>DS</sub> drops below
+V<sub>DSAT</sub>, the device enters <b>triode</b>: it behaves like a resistor, its output resistance collapses, and the gain of its stage
+collapses with it. A current mirror in triode also stops copying its current correctly.</p>
+<p>V<sub>DSAT</sub> and V<sub>DS</sub> both move with process corner and temperature. A device sitting 5 mV inside saturation at the typical
+corner can fall into triode at a cold, slow corner. So designers demand a <b>margin</b> |V<sub>DS</sub>| − |V<sub>DSAT</sub>| at every corner.</p>
+<p class="small muted">In this project: ≥ 50 mV for input pair, load and driver; ≥ 0 mV for tail and sink bottom devices; +10 mV with the guard band.
+The published design fails this: its tail cascode goes into triode at 125 °C in all five corners.</p>
+
+<h2><span class="num">B3</span>Small-signal quantities: g<sub>m</sub>, r<sub>o</sub>, intrinsic gain, g<sub>m</sub>/I<sub>D</sub> and L</h2>
+<p>An amplifier works on small wiggles around a fixed bias point. Three numbers describe a transistor at that point.</p>
+<ul>
+  <li><b>Transconductance g<sub>m</sub></b> = ΔI<sub>D</sub>/ΔV<sub>GS</sub>: how much the current changes per volt on the gate. Units: siemens (A/V).
+  More g<sub>m</sub> means more gain and more speed.</li>
+  <li><b>Output resistance r<sub>o</sub></b>: how little the current depends on the drain voltage (the slight slope in Figure 6). It grows with
+  channel length L.</li>
+  <li><b>Intrinsic gain g<sub>m</sub>·r<sub>o</sub></b>: the most voltage gain one transistor can give, roughly 10 to 100 depending on process and L.
+  A stage's gain is about g<sub>m</sub> times the resistance at its output.</li>
+</ul>
+<p><b>g<sub>m</sub>/I<sub>D</sub></b> is the design variable modern analog designers use instead of raw width. It answers "how much
+g<sub>m</sub> do I get per microamp?" and it is set by how strongly the device is turned on.</p>
+<table class="tight">
+<thead><tr><th>g<sub>m</sub>/I<sub>D</sub></th><th>Regime</th><th>Character</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td>15–25 /V</td><td>weak / moderate inversion</td><td>efficient, low noise, little headroom needed; wide and slow</td><td>input pairs in low-power amps</td></tr>
+<tr><td>≈10 /V</td><td>moderate / strong</td><td>balanced</td><td>second-stage driver</td></tr>
+<tr><td>5–10 /V</td><td>strong inversion</td><td>fast, compact, better current matching; costs current and headroom</td><td>current mirrors, bias devices (often long L)</td></tr>
+</tbody></table>
+<p><b>Length L</b> trades gain against speed. A longer channel raises r<sub>o</sub> and so the intrinsic gain, and improves matching, but
+adds gate capacitance, which makes the device slower. g<sub>m</sub>/I<sub>D</sub> and L together fix a transistor's character; W then
+scales it to the current you need. That is why sizing can be done as arithmetic: spec → required g<sub>m</sub> → current → width.</p>
+<p class="small muted">In this project: the swarm lengthened the load and driver (0.7 µm → 1.0–1.85 µm) to raise the DC gain from 54.6 dB to above 63 dB,
+and widened the input pair (5 µm → 22–50 µm) to push it toward high g<sub>m</sub>/I<sub>D</sub>.</p>
+
+<h2><span class="num">B4</span>The two-stage Miller op-amp, block by block</h2>
+<p>An <b>op-amp</b> amplifies the difference between two inputs by a large factor. Used with feedback, that large gain turns into a precise,
+stable smaller gain. The two-stage Miller op-amp is the standard teaching and benchmarking circuit, and it is ours.</p>
+<figure>
+  {{svg_opamp_blocks}}
+  <figcaption><b>Figure 7. The op-amp as blocks,</b> colored as in the project's role map (Figure 4). The frozen bias network sets the gate
+  voltages of the tail and sink; the optimizer cannot touch it.</figcaption>
+</figure>
+<table class="tight">
+<thead><tr><th>Block (our role)</th><th>Job</th><th>Our knobs</th><th>What moving it does</th></tr></thead>
+<tbody>
+<tr><td><b>Input pair</b> (in)</td><td>Converts the input voltage difference into a current</td><td>W_in, L_in</td><td>Wider → more g<sub>m</sub>, lower V<sub>GS</sub>, more tail headroom; more capacitance</td></tr>
+<tr><td><b>Mirror load</b> (load)</td><td>Turns that current into a voltage at node X with high resistance</td><td>W_load, L_load</td><td>Longer → more r<sub>o</sub> → more stage-1 gain</td></tr>
+<tr><td><b>Tail</b> (tail)</td><td>Fixed current for the pair; rejects common-mode input</td><td>W_tail (L fixed)</td><td>Sets I<sub>tail</sub>; more current → more g<sub>m</sub> and UGF, more power</td></tr>
+<tr><td><b>Driver</b> (drv)</td><td>Second gain stage; drives the load capacitor</td><td>W_drv, L_drv</td><td>Its g<sub>m</sub> sets the second pole, so it decides stability</td></tr>
+<tr><td><b>Sink</b> (sink)</td><td>Fixed current for stage 2</td><td>W_sink (L fixed)</td><td>Sets I<sub>sink</sub>, the largest share of core current</td></tr>
+<tr><td><b>Cc, Rz</b></td><td>Miller compensation from node X to vout</td><td>Cc, Rz</td><td>Cc sets bandwidth and stability; Rz moves a harmful zero (B6)</td></tr>
+<tr><td><b>Ibias</b></td><td>Reference current into the bias network</td><td>Ibias</td><td>Scales both tail and sink currents</td></tr>
+</tbody></table>
+<p>Total gain is the product of the two stage gains, roughly g<sub>m,in</sub>(r<sub>o,in</sub> ∥ r<sub>o,load</sub>) × g<sub>m,drv</sub>(r<sub>o,drv</sub> ∥ r<sub>o,sink</sub>).
+Two stages give enough gain (60 dB = 1000×) at a 1.8 V supply. The price is a second pole, which is why compensation is needed.</p>
+<p>The tail and sink are <b>wide-swing cascodes</b>: two stacked transistors that act as a better current source than one. Stacking
+costs voltage headroom, and the "wide-swing" bias trick keeps the bottom device just barely in saturation to save that headroom. That
+is why our rules only ask those bottom devices to stay saturated (≥ 0 mV), not to keep 50 mV.</p>
+
+<h2><span class="num">B5</span>Feedback, loop gain, unity-gain frequency and phase margin</h2>
+<p>An op-amp almost always runs inside a <b>feedback loop</b>: part of the output goes back to the inverting input. Our testbench uses the
+simplest loop, a <b>unity-gain follower</b> (output wired straight to the inverting input), which is also the hardest case for stability.
+The <b>loop gain</b> T is the gain a signal sees going once around the loop. While |T| is large, feedback holds the output accurate.</p>
+<ul>
+  <li><b>DC loop gain</b>: |T| at low frequency, in decibels (dB = 20·log<sub>10</sub>). 60 dB is a factor of 1000; it sets accuracy (here, a follower error of about 0.1%).</li>
+  <li><b>Unity-gain frequency (UGF)</b>: the frequency where |T| falls to 1 (0 dB). Above it feedback stops working, so UGF measures speed.
+  For a follower it equals the op-amp's gain-bandwidth product (GBW).</li>
+  <li><b>Phase margin (PM)</b>: 180° minus the phase lag of T at the UGF. If the lag reaches 180° while |T| is still 1, the signal returns
+  inverted twice, adds to itself, and the circuit oscillates.</li>
+  <li><b>Gain margin (GM)</b>: how far |T| is below 1 at the frequency where the lag reaches 180°. A second safety number.</li>
+</ul>
+<figure class="narrow">
+  {{svg_bode_sketch}}
+  <figcaption><b>Figure 8. A Bode plot of the loop gain</b> (an idealized two-stage loop). Each pole bends the magnitude down by an extra
+  20 dB per decade and adds up to 90° of phase lag. Phase margin is read at the unity-gain crossing; gain margin at the −180° crossing.</figcaption>
+</figure>
+<p><b>The ringing intuition.</b> Phase margin decides how the output answers a step. With about 60° it settles with a small overshoot,
+under 10%. At 45° it overshoots by roughly 20–25% and rings for a few cycles. At 30° it overshoots by about a third and rings for many
+cycles; near 0° it oscillates. The published design has 31.5° at the typical corner and {{def_pm}}° at its worst corner, so it rings badly.
+That is why 60° is the usual target, and why we added 5° of guard band on top.</p>
+<p>How we measure it: AMPICBench's testbench uses Tian's double-injection method, which measures loop gain without breaking the loop, so
+the DC bias point stays correct. Our sign-off agent has to pick and justify its own method.</p>
+
+<h2><span class="num">B6</span>Compensation: pole splitting, the right-half-plane zero, and R<sub>z</sub></h2>
+<p>Each stage has a high-resistance node with some capacitance, and every such node makes a <b>pole</b>: a frequency where the gain starts
+to fall and the phase lag grows. Two poles at similar frequencies pile up nearly 180° of lag near the UGF. <b>Miller compensation</b> puts a
+capacitor Cc across the second stage. The second stage's gain multiplies Cc's effect at node X, which pushes the first pole down to a low
+frequency (the dominant pole) and the second pole up. This is <b>pole splitting</b>. The useful approximations are:</p>
+<p class="eq">UGF ≈ g<sub>m,in</sub> / (2π·Cc) &nbsp;&nbsp;&nbsp; second pole ≈ g<sub>m,drv</sub> / (2π·C<sub>L</sub>) &nbsp;&nbsp;&nbsp; zero ≈ g<sub>m,drv</sub> / (2π·Cc)</p>
+<p>For about 60° of phase margin the second pole must sit at least about 2.2× above the UGF. Cc also opens a feed-forward path from node X
+to the output, creating a <b>right-half-plane (RHP) zero</b>. Unlike a normal zero it adds phase <i>lag</i>, so it hurts stability. A resistor
+<b>Rz</b> in series with Cc, near 1/g<sub>m,drv</sub>, pushes that zero to infinity; a larger Rz moves it into the left half plane, where it
+adds helpful phase lead.</p>
+<div class="callout good">
+  <div class="callout-title">Worked example with real numbers (run {{ex_run}}, design #{{ex_n}})</div>
+  <p>Ibias = {{ex_ibias}} µA, W<sub>tail</sub> = {{ex_wtail}} µm, W<sub>sink</sub> = {{ex_wsink}} µm. The mirror ratios give
+  I<sub>tail</sub> ≈ {{ex_ibias}} × 2 × {{ex_wtail}}/5 = {{ex_itail}} µA and I<sub>sink</sub> ≈ {{ex_ibias}} × 3 × {{ex_wsink}}/5 = {{ex_isink}} µA,
+  so core current ≈ {{ex_icore_calc}} µA. The simulator's worst case is {{ex_icore_sim}} µA.</p>
+  <p>Cc = {{ex_cc}} pF and worst-case UGF = {{ex_ugf}} MHz (at {{ex_ugf_at}}) imply g<sub>m,in</sub> ≈ 2π × UGF × Cc ≈ {{ex_gm1}} µS. Each
+  input transistor carries half the tail current, so g<sub>m</sub>/I<sub>D</sub> ≈ {{ex_gmid}} /V: moderate inversion, as expected for a
+  {{ex_win}} µm-wide input pair. Worst-case phase margin is {{ex_pm}}° (at {{ex_pm_at}}) and worst-case DC gain {{ex_gain}} dB, with Rz = {{ex_rz}} kΩ.</p>
+</div>
+<p class="small muted">In this project: the published design has Cc = 0.25 pF and Rz = 3 kΩ, which gives a UGF near 100 MHz, far above its second pole. Every
+passing swarm design raised Cc to 0.5–1.35 pF and Rz to 5.8–16 kΩ, giving up bandwidth the spec did not need in exchange for phase margin.</p>
+
+<h2><span class="num">B7</span>Key trade-offs</h2>
+<table class="tight">
+<thead><tr><th>Move</th><th>DC gain</th><th>UGF (speed)</th><th>Phase margin</th><th>Current</th><th>Headroom</th></tr></thead>
+<tbody>
+<tr><td>More tail current</td><td>slightly ↓</td><td>↑</td><td>↓ (UGF nears 2nd pole)</td><td>↑</td><td>↓ input pair V<sub>GS</sub> rises</td></tr>
+<tr><td>More stage-2 current</td><td>slightly ↓</td><td>–</td><td>↑ (2nd pole moves up)</td><td>↑</td><td>–</td></tr>
+<tr><td>Longer L (load, driver)</td><td>↑</td><td>–</td><td>↓ (more capacitance)</td><td>–</td><td>↓ (larger V<sub>DSAT</sub> for same W)</td></tr>
+<tr><td>Larger Cc</td><td>–</td><td>↓</td><td>↑</td><td>–</td><td>–</td></tr>
+<tr><td>Larger Rz (up to a point)</td><td>–</td><td>–</td><td>↑ (zero becomes lead)</td><td>–</td><td>–</td></tr>
+<tr><td>Wider input pair</td><td>↑ (more g<sub>m</sub>)</td><td>↑</td><td>↓ slightly</td><td>–</td><td>↑ tail gets more V<sub>DS</sub></td></tr>
+</tbody></table>
+<p>These are first-order tendencies, not laws; in a real circuit they interact, which is the reason sizing needs a simulator in the loop.</p>
+
+<h3>Headroom: why the tail drops into triode at cold, slow corners</h3>
+<p>The input common-mode voltage is fixed at 0.9 V. The tail's drain sits one input-pair V<sub>GS</sub> below it: V<sub>tail</sub> ≈ 0.9 V − (V<sub>TH</sub> + V<sub>OV,in</sub>).
+At cold temperature and in slow corners, V<sub>TH</sub> is higher, so V<sub>GS</sub> rises and the tail node drops. The two stacked tail
+devices then share less voltage, and the bottom one (whose headroom the frozen bias already keeps small) falls out of saturation first. That is exactly what the
+published design shows (Figure 9, bottom): the tail bottom device goes into triode at −40 °C.</p>
+<p>Two fixes, and the swarm used both. <b>Widen the input pair</b>: at the same current a wider device needs less overdrive (in the square
+law, 10× the width cuts V<sub>OV</sub> by about √10), so V<sub>GS</sub> drops and the tail node rises. <b>Cut the tail current</b>: less
+current also lowers V<sub>OV,in</sub>. Design #{{ex_n}}'s rationale says this in words: "widening W_in_um to {{ex_win}} um to protect tail saturation margin".</p>
+<figure class="narrow">
+  {{fig_sat}}
+  <figcaption><b>Figure 9. Saturation margin of all nine signal-path devices at all 15 points</b> (mV above each role's requirement). Top:
+  swarm design (run <code>first40</code>, #39). Bottom: the published design, with six device-corner cells in triode (hatched). Source:
+  <code>{{fig_sat_src}}</code>.</figcaption>
+</figure>
+
+<h2><span class="num">B8</span>PVT corners and Monte Carlo: why "works at typical" is not enough</h2>
+<p>No two chips come out of the fab the same, and every chip runs at many temperatures. Designers check three kinds of variation.</p>
+<ul>
+  <li><b>Process corners.</b> The foundry ships models for typical (tt), fast (ff) and slow (ss) transistors, and the mixed cases sf and fs,
+  where the first letter is NMOS and the second PMOS. "Fast" means more current at the same voltages (lower threshold, higher mobility).</li>
+  <li><b>Voltage.</b> The supply can sit about 10% high or low. <i>We did not vary it</i>: all our runs use 1.8 V.</li>
+  <li><b>Temperature.</b> Typically −40 °C to 125 °C. Heat lowers mobility (slower) and lowers threshold; cold does the opposite.</li>
+</ul>
+<p>Our 15 points are 5 corners × 3 temperatures. Corners bound <i>global</i> variation, where every transistor on a die shifts together.
+<b>Monte Carlo</b> simulation samples <i>random local</i> variation (mismatch between neighboring transistors) hundreds of times to estimate
+offset spread and yield. We did not run Monte Carlo; the guard band is a stand-in for that margin.</p>
+<p class="small muted">In this project: {{tt_pass}} of {{tt_n}} guard-band candidates passed at tt/27 °C, only {{all_pass}} of {{tt_n}} at all 15 points.
+Worst cases land in different places for different specs: for the best guard-band designs, phase margin bottoms out at fs/125 °C,
+UGF at ss/125 °C and saturation margin at fs/−40 °C.</p>
+
+<h2><span class="num">B9</span>The full design flow, and where this project sits</h2>
+<table class="tight">
+<thead><tr><th>Step</th><th>What happens</th><th>This project</th></tr></thead>
+<tbody>
+<tr><td>1. Spec</td><td>Numbers from a system budget or datasheet: gain, bandwidth, power, noise</td><td>hand-written spec + guard band</td></tr>
+<tr><td>2. Topology</td><td>Pick a known circuit (two-stage, folded cascode, telescopic…)</td><td>given (AMPICBench)</td></tr>
+<tr><td>3. Sizing</td><td>Hand analysis with g<sub>m</sub>/I<sub>D</sub>, then simulation-driven tuning</td><td><b>automated by the swarm</b></td></tr>
+<tr><td>4. Schematic simulation</td><td>Operating point, AC/stability, transient, noise</td><td><b>yes</b>: op point + loop gain</td></tr>
+<tr><td>5. Corners, Monte Carlo</td><td>Process × voltage × temperature; mismatch for yield</td><td><b>corners × temperature</b>; no V, no MC</td></tr>
+<tr><td>6. Layout</td><td>Draw polygons; common-centroid placement for matched pairs</td><td>no</td></tr>
+<tr><td>7. DRC / LVS</td><td>Check design rules; check layout matches schematic</td><td>no</td></tr>
+<tr><td>8. Parasitic extraction</td><td>Add wire resistance and capacitance; re-simulate at all corners</td><td>no</td></tr>
+<tr><td>9. Tapeout, test</td><td>Fabricate, measure on the bench, trim</td><td>no</td></tr>
+</tbody></table>
+<p>Failures at any step send the designer back to an earlier one, usually to re-size. Layout can cost a lot: in one published example an
+automatically generated layout lost about 49% of the schematic's bandwidth. That is why the guard band matters.</p>
+
+<h2><span class="num">B10</span>Why sizing is hard to automate, and where LLMs fit</h2>
+<p>Sizing is constrained optimization. The variables are widths, lengths, bias currents and passives (11 here; hundreds in a real block). The
+constraints are the specs at every corner plus the operating region of every device. The objective is usually power or area. The problem is
+non-convex, each evaluation is a batch of simulations, and the feasible region can be tiny.</p>
+<table class="tight">
+<thead><tr><th>Approach</th><th>How it works</th><th>Weakness</th></tr></thead>
+<tbody>
+<tr><td>Hand design</td><td>Designer knows which knob moves which spec; g<sub>m</sub>/I<sub>D</sub> charts</td><td>Slow; needs scarce experts</td></tr>
+<tr><td>Equation-based</td><td>Write performance as formulas; solve exactly (e.g. geometric programming, 2001)</td><td>Formulas drift from reality in modern processes</td></tr>
+<tr><td>Black-box search</td><td>Random, genetic, Bayesian optimization (BO), RL with SPICE as oracle</td><td>Blind to physics; needs many simulations; corners multiply cost</td></tr>
+<tr><td>LLM agents</td><td>Model reasons like a designer, simulator verifies</td><td>Imprecise with numbers; can "declare success"; needs a hard judge</td></tr>
+</tbody></table>
+<p><b>Bayesian optimization</b> fits a statistical surrogate (a Gaussian process, GP) to the results so far and picks the next point where
+improvement looks most likely. <b>TPE</b> (tree-structured Parzen estimator, Optuna's default) does the same with density models instead of
+a GP. Both see only 11 numbers and a score. They do not know that Cc trades bandwidth for phase margin, or that the tail needs headroom.</p>
+<p><b>The division of labor.</b> The 2025–2026 papers converge on one split: the LLM does what looks like a designer's reasoning (what each
+device does, which knob to move, which direction, why a corner fails), and a simulator plus, optionally, a numerical optimizer does the
+numbers and the judging. AutoSizer (ICML 2026) uses an LLM to reshape the search space around a numerical optimizer. Our system keeps the
+LLM proposing concrete sizes, but only ngspice decides pass or fail. The one independent rerun we found shows plain TPE beating a published
+LLM agent once the agent's spec check was fixed, so we claim only what we measured: fewer simulations to an all-corner pass on this circuit,
+at this budget, with reasons attached to every move.</p>
+
+<!-- ================================================================== PART C -->
+<section class="part">
+  <div class="kicker">Part C</div>
+  <h1>Judge questions, glossary and pitch</h1>
+  <p>Short answers you can say out loud, each with a number from this project.</p>
+</section>
+
+<h2><span class="num">C1</span>Likely judge questions</h2>
+
+<div class="qa"><div class="qa-q">Why is phase margin important?</div>
+<p>An op-amp runs inside feedback. If the loop's phase lag reaches 180° while the loop gain is still 1, the feedback adds instead of
+subtracts and the circuit oscillates. Phase margin is the distance from that point. At 60° a step settles with under 10% overshoot; at 30°
+it rings. The published design we start from has {{def_pm}}° at its worst corner. Every swarm design we report has at least 60°, and the
+guard-band runs at least 65°.</p></div>
+
+<div class="qa"><div class="qa-q">What is a PVT corner?</div>
+<p>Process, voltage, temperature: the manufacturing and operating extremes a chip must survive. Process corners are fast or slow NMOS and
+PMOS from the foundry's models; temperature runs −40 to 125 °C. We check 5 process corners × 3 temperatures = 15 points for every candidate.
+We hold supply voltage at 1.8 V; adding ±10% supply is on the next-steps list.</p></div>
+
+<div class="qa"><div class="qa-q">Why not just use Bayesian optimization?</div>
+<p>We did, as the baseline, at the same 600-simulation budget. TPE found no passing design in {{n_bl_g}} guard-band runs; on the bare spec only
+{{k_bl_ng}} of {{n_bl_ng}} finished baseline runs passed, and only near the end of the budget. The same samplers succeed on easier benchmark circuits
+({{ams_k}} of {{ams_n}} runs on AMS-SizingBench at the typical corner), so the harness is fine. The 15-corner feasible region is a thin sliver, and
+BO is blind to the physics that points at it. BO with a larger budget or physics priors may close the gap; we did not test that, and the best
+system is probably a hybrid.</p></div>
+
+<div class="qa"><div class="qa-q">How do you know the LLM didn't cheat?</div>
+<p>The LLM never judges. ngspice measures every candidate at all 15 points, including the saturation of all nine signal-path transistors; a
+failed simulation is a failure; the budget counter blocks extra simulations; the final design is re-simulated on the full foundry library. We
+also guard against a published failure: AutoSizer's spec parser silently dropped negative thresholds and inflated success from about 69% to
+over 90%. And a separate Managed Agent re-derives the numbers with its own testbench.</p></div>
+
+<div class="qa"><div class="qa-q">Did it just copy the published design?</div>
+<p>The published design is our starting point and it fails every spec (PM {{def_pm}}°, gain {{def_gain}} dB, {{def_icore}} µA, a device in triode).
+The passing designs are far from it: input pair 5 µm → 22–50 µm wide, Cc 0.25 pF → 0.5–1.35 pF, tail width 5 µm → about 1 µm.</p></div>
+
+<div class="qa"><div class="qa-q">Is three seeds enough?</div>
+<p>No, not for statistics. That is why we show every run instead of a percentage. The swarm passed in all {{n_sw_g}} guard-band runs and all
+{{n_sw_ng}} bare-spec runs; TPE passed in none of its finished runs. The gap is large, but the honest claim is "on this circuit, at this budget".
+Held-out circuits are the next test.</p></div>
+
+<div class="qa"><div class="qa-q">Why two models?</div>
+<p>Carbon is the stronger planner and writes the diagnosis; Hydrogen is faster (median {{lat_h_med}} s per call) and cheaper for the many
+proposal calls. Carbon's latency varied from {{lat_c_range}} s and once hit {{f40_carbon}} s, so it has a 120 s timeout with a Hydrogen fallback,
+and re-plans run in the background.</p></div>
+
+<div class="qa"><div class="qa-q">What is the guard band for?</div>
+<p>Our first run's best design passed with {{f40_pm}}° of phase margin against a 60° limit. Model error, layout and mismatch would erase that.
+The optimizers now aim 5° higher on PM, 10% higher on UGF, 3 dB higher on gain, 10% lower on current and 10 mV more saturation margin. It costs
+current ({{icore_sw_g_range}} µA instead of {{icore_sw_ng_range}} µA) and takes longer to find.</p></div>
+
+<div class="qa"><div class="qa-q">How do you know the fast model library gives the right answer?</div>
+<p>We built it by trimming the official library, checked that it gives identical numbers, and re-simulate every final design on the full
+library (about 9 s per deck instead of 0.2 s). Every passing swarm design re-passed.</p></div>
+
+<div class="qa"><div class="qa-q">Where is the multimodality?</div>
+<p>Today the sign-off agent reads the schematic image along with the bare netlist, and the visualizer renders schematics and Bode plots for
+people. The planned perception front end (datasheet PDF → spec, schematic image → device roles) is not built yet; we say so rather than fake it.</p></div>
+
+<div class="qa"><div class="qa-q">What does the sign-off agent add if you already simulate?</div>
+<p>Independence. Our optimizer and our evaluator share code, so a bug in the testbench would fool both. The agent gets no testbench, must
+calibrate its own against the circuit authors' published numbers, and then verify the design. If its verdict matches ours, the testbench is
+unlikely to be the problem.</p></div>
+
+<div class="qa"><div class="qa-q">Why does the tail get 0 mV saturation margin while others need 50 mV?</div>
+<p>The tail and sink are wide-swing cascodes biased by a fixed network we may not change. That network deliberately runs their bottom
+device just inside saturation (23–37 mV at the typical corner in the published design). Demanding 50 mV there would be impossible without
+redesigning the bias network, so the rule is "stay saturated" (plus 10 mV with the guard band).</p></div>
+
+<div class="qa"><div class="qa-q">What does it cost, and how long does it take?</div>
+<p>{{cost_range}} of Gemini calls per 40-candidate run ({{calls_range}} calls), and about {{wall_sw}} s of wall time on a laptop. Simulation is
+cheap (0.6 s per candidate), so LLM latency dominates.</p></div>
+
+<div class="qa"><div class="qa-q">Would this work on a real product?</div>
+<p>Not as is. Real blocks have hundreds of devices, need supply corners, Monte Carlo yield, noise and slew specs, and post-layout verification.
+This is the schematic-sizing step of that flow, with an honest judge. The parts that carry over are the role-based knobs, the all-corner judge
+and the guard band.</p></div>
+
+<div class="qa"><div class="qa-q">What is core current, and why minimize it?</div>
+<p>The current through the tail and the second-stage sink: the part of the supply current the knobs control (the fixed bias network is
+excluded). Lower current means lower power, which is what a datasheet's quiescent-current line measures. Once the spec is met, the swarm's
+only objective is lowering it.</p></div>
+
+<h2><span class="num">C2</span>Glossary</h2>
+<div class="cols2">
+<p><b>AC / stability analysis.</b> Small-signal simulation over frequency; gives gain and phase.</p>
+<p><b>AMPICBench.</b> Public op-amp benchmark with SKY130 netlists and published results; source of our circuits.</p>
+<p><b>Bias.</b> The fixed DC currents and voltages that put each transistor at its operating point.</p>
+<p><b>Bode plot.</b> Gain (dB) and phase against log frequency.</p>
+<p><b>Cascode.</b> A second transistor stacked on the first to raise output resistance; costs headroom.</p>
+<p><b>Cc, Rz.</b> Miller compensation capacitor and its series nulling resistor.</p>
+<p><b>CL.</b> Load capacitance at the output; 500 fF here.</p>
+<p><b>Core current.</b> Tail + stage-2 sink current; our power objective.</p>
+<p><b>Corner.</b> A foundry model for fast/slow NMOS/PMOS: tt, ff, ss, sf, fs.</p>
+<p><b>Current mirror.</b> Transistors that copy a reference current; needs matched lengths.</p>
+<p><b>dB.</b> 20·log<sub>10</sub> of a voltage ratio; 60 dB = 1000×.</p>
+<p><b>Deck.</b> One ngspice input file: circuit, corner, temperature, measurements.</p>
+<p><b>Differential pair.</b> Two matched transistors that amplify the difference between two inputs.</p>
+<p><b>Dominant pole.</b> The low-frequency pole Cc creates on purpose so gain falls smoothly.</p>
+<p><b>Gain margin.</b> How far loop gain is below 1 where the phase reaches −180°.</p>
+<p><b>g<sub>m</sub>.</b> Transconductance: change in drain current per volt of gate voltage.</p>
+<p><b>g<sub>m</sub>/I<sub>D</sub>.</b> Transconductance per unit current; sets a device's efficiency and speed.</p>
+<p><b>Guard band.</b> Tighter internal target than the spec, to leave margin.</p>
+<p><b>Headroom.</b> Voltage left for a device to stay in saturation.</p>
+<p><b>Intrinsic gain.</b> g<sub>m</sub>·r<sub>o</sub>, the most gain one transistor can give.</p>
+<p><b>Loop gain.</b> Gain around a feedback loop; its UGF and phase set speed and stability.</p>
+<p><b>LVT.</b> Low-threshold-voltage transistor variant.</p>
+<p><b>Managed Agent.</b> A Gemini agent run by Google with its own sandbox and tools; ours calls back to local ngspice.</p>
+<p><b>Monte Carlo.</b> Many simulations with random device mismatch, to estimate yield.</p>
+<p><b>Netlist.</b> Text list of components and connections that SPICE reads.</p>
+<p><b>ngspice.</b> Open-source SPICE circuit simulator (version 47 here).</p>
+<p><b>Operating point.</b> The DC voltages and currents of every device with no signal.</p>
+<p><b>Overdrive V<sub>OV</sub>.</b> V<sub>GS</sub> − V<sub>TH</sub>.</p>
+<p><b>PDK.</b> Process design kit: the foundry's models and rules. SKY130 is open.</p>
+<p><b>Phase margin.</b> 180° minus loop phase lag at the UGF; ≥ 60° is the usual target.</p>
+<p><b>Pole / zero.</b> Frequencies where gain starts to fall (pole) or rise (zero), each with a phase shift.</p>
+<p><b>PVT.</b> Process, voltage, temperature variation.</p>
+<p><b>r<sub>o</sub>.</b> Output resistance of a saturated transistor; grows with L.</p>
+<p><b>RHP zero.</b> Right-half-plane zero from Cc's feed-forward path; adds lag. Rz fixes it.</p>
+<p><b>Saturation.</b> Region where a transistor acts as a current source; needed for gain.</p>
+<p><b>SKY130.</b> SkyWater's open 130 nm CMOS process.</p>
+<p><b>Slew rate.</b> Fastest output swing for a large step; not in our spec.</p>
+<p><b>Tail.</b> Current source under the differential pair.</p>
+<p><b>Tian method.</b> Loop-gain measurement that injects voltage and current without breaking the loop.</p>
+<p><b>TPE / GP-BO.</b> Bayesian-style samplers in Optuna; our blind baselines.</p>
+<p><b>Triode.</b> Region where a transistor acts as a resistor; gain collapses.</p>
+<p><b>UGF / GBW.</b> Frequency where loop gain falls to 1; equals gain-bandwidth for a follower.</p>
+<p><b>V<sub>DSAT</sub>.</b> Minimum drain-source voltage for saturation.</p>
+<p><b>V<sub>TH</sub>.</b> Threshold voltage; rises in the cold and in slow corners.</p>
+<p><b>Wide-swing cascode.</b> Cascode biased to keep the bottom device just saturated, saving headroom.</p>
+</div>
+
+<h2><span class="num">C3</span>The 60-second pitch</h2>
+<div class="pitch">
+<p>Every chip has analog blocks, and sizing their transistors is still done by hand by scarce experts. We made Gemini 4 do that job.</p>
+<p>Our circuit is a two-stage op-amp on SkyWater's open 130-nanometer process. It has to be stable, fast, accurate and low-power at fifteen
+combinations of manufacturing corner and temperature. The published sizing fails: its phase margin is {{def_pm}} degrees, so it rings.</p>
+<p>Gemini 4 Carbon plays the lead designer. It reads the results and writes a diagnosis in circuit terms, like "the tail transistor runs
+out of headroom at cold corners." Four Gemini 4 Hydrogen workers each propose sizes along a different direction. The models never grade
+themselves: the ngspice simulator checks every proposal at all fifteen corners, including whether each transistor is in saturation.</p>
+<p>With 600 simulations, the swarm found a passing design in every run, {{k_sw_g}} of {{n_sw_g}} with a safety guard band. Bayesian-style
+optimizers with the same budget found none. Every swarm design re-passes on the full foundry models, and a separate Gemini Managed Agent
+writes its own testbench to double-check us. Each run costs under a dollar.</p>
+</div>
+
+</body>
+</html>

@@ -161,6 +161,35 @@ for _c in CIRCUITS.values():
                              for (sub, inst), role in _c["role_map"].items()}
 
 
+# role -> (has its own L knob?, required saturation margin). Mirror-of-bias roles keep L fixed.
+ROLE_RULES = {"in": (True, 0.05), "load": (True, 0.05), "psrc": (True, 0.05), "drv": (True, 0.05),
+              "pcas": (False, 0.05), "ncas": (False, 0.05),
+              "tail": (False, 0.0), "sink": (False, 0.0), "nsink": (False, 0.0)}
+ROLE_ORDER = ["in", "ncas", "tail", "load", "psrc", "pcas", "nsink", "drv", "sink"]
+
+
+def register_from_roles(base: str, role_map: dict, name: str = "live") -> str:
+    """Build a tunable circuit from a (subckt, instance) -> role map, e.g. one predicted from a
+    schematic photo. The role map IS the search space: devices sharing a role share a knob."""
+    c = CIRCUITS[base]
+    role_map = {k: v for k, v in role_map.items() if v in ROLE_RULES}
+    roles = [r for r in ROLE_ORDER if r in set(role_map.values())]
+    space = {}
+    for r in roles:
+        pol = [inst for (_, inst), rr in role_map.items() if rr == r][0][1].upper()   # XNM.. / XPM..
+        wd, ld = (5e-6, 300e-9) if pol == "N" else (20e-6, 700e-9)
+        space[f"W_{r}"] = _WM(wd) if r in ("tail", "sink", "nsink") else _W(wd)
+        if ROLE_RULES[r][0]:
+            space[f"L_{r}"] = _LN(ld) if pol == "N" else _LP(ld)
+    for k in ("Ibias", "Cc", "Rz"):
+        space[k] = c["space"][k]
+    CIRCUITS[name] = dict(c, role_map=role_map, role_has_l={r: ROLE_RULES[r][0] for r in roles},
+                          sat_margin={r: ROLE_RULES[r][1] for r in roles}, space=space, base=base,
+                          device_role={f"m.xi1.{_SUBCKT_INST[sub]}.{inst.lower()}": role
+                                       for (sub, inst), role in role_map.items()})
+    return name
+
+
 def use(name: str) -> None:
     """Switch the module to another registered circuit (rebinds module globals)."""
     global SRC, ROLE_MAP, ROLE_HAS_L, DEVICE_ROLE, SAT_MARGIN, SPACE, DEFAULTS, SUPPLY
@@ -353,7 +382,7 @@ def _read_curves(path: Path) -> dict | None:
 
 def simulate_point(params: dict, corner: str, temp: float, lib: str = "slim",
                    timeout: float = 60, budget: Budget | None = None,
-                   curves: bool = False) -> PointResult:
+                   curves: bool = False, deck_hook=None) -> PointResult:
     if budget:
         budget.take()
     r = PointResult(corner, temp)
@@ -363,6 +392,8 @@ def simulate_point(params: dict, corner: str, temp: float, lib: str = "slim",
             d = Path(td)
             (d / ".spiceinit").write_text(SPICEINIT.read_text())
             deck = render(params, corner, temp, lib)
+            if deck_hook:      # e.g. layout stage: finger counts, wiring parasitics
+                deck = deck_hook(deck)
             if curves:   # dump the loop-gain vectors (frequency, dB, deg) after the measurements
                 deck = deck.replace("echo @@DONE", f"wrdata {CURVES_FILE} lg_db lg_ph\necho @@DONE", 1)
             (d / "deck.cir").write_text(deck)
@@ -506,7 +537,7 @@ def recheck_full(params: dict, spec: dict | None = None, guard: bool = True) -> 
 
 def evaluate(params: dict, spec: dict | None = None, points=PVT15, lib: str = "slim",
              budget: Budget | None = None, jobs: int = 15, curves: bool = False,
-             guard: bool = True, timeout: float = 60) -> EvalResult:
+             guard: bool = True, timeout: float = 60, deck_hook=None) -> EvalResult:
     """Judge a design at every PVT point against the spec. With guard=True (default) the
     pass/fail and `failures` use the guard-banded DESIGN TARGET (see GUARD, SAT_GUARD_V);
     `passed_nominal` always reports the bare spec.
@@ -519,7 +550,7 @@ def evaluate(params: dict, spec: dict | None = None, points=PVT15, lib: str = "s
     t0 = time.perf_counter()
     with ThreadPoolExecutor(jobs) as ex:
         res = list(ex.map(lambda ct: simulate_point(p, ct[0], ct[1], lib, timeout=timeout,
-                                                     curves=curves), points))
+                                                     curves=curves, deck_hook=deck_hook), points))
     er = EvalResult(p, res, target, spec_nominal=nominal, guard=guard)
     er.failures, er.worst = _check(res, target, use_guard_sat=guard)
     nominal_failures, _ = _check(res, nominal, use_guard_sat=False)

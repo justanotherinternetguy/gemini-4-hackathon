@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tapeout Crew</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">Tapeout Crew <span>a team of Gemini 4 agents sizes an analog chip, and a simulator keeps them honest</span></div>
+  <nav id="nav">
+    <button data-step="1"><kbd>1</kbd> Show it the circuit</button>
+    <button data-step="2"><kbd>2</kbd> Tell it what you need</button>
+    <button data-step="3"><kbd>3</kbd> The crew works</button>
+    <button data-step="4"><kbd>4</kbd> Lay it out</button>
+    <button data-step="5"><kbd>5</kbd> Verify</button>
+    <button data-step="6"><kbd>6</kbd> Proof</button>
+  </nav>
+</header>
+
+<!-- ============================== STEP 1 -->
+<section id="step1" class="step">
+  <div class="cols c2">
+    <div class="panel">
+      <h2>1 &middot; Show it the circuit</h2>
+      <p class="sub">Point the camera at any of our op-amp schematics. The <b>Decisions API</b> decides what job each transistor does.</p>
+      <div class="camwrap">
+        <video id="cam" autoplay playsinline muted></video>
+        <img id="photo" alt="" hidden>
+        <div id="camhint" class="camhint">camera off</div>
+      </div>
+      <div class="row">
+        <button id="btnCam" class="big">Start camera</button>
+        <button id="btnCapture" class="big primary" disabled>Capture <kbd>Enter</kbd></button>
+        <label class="big filebtn">Upload photo<input id="filePhoto" type="file" accept="image/*" hidden></label>
+        <select id="selCircuit" title="circuit hint">
+          <option value="auto">circuit: auto-detect</option>
+          <option value="diff">two-stage diff</option>
+          <option value="fc">folded cascode</option>
+          <option value="tele">telescopic</option>
+        </select>
+      </div>
+    </div>
+    <div class="panel">
+      <div id="roleHeadline" class="headline muted">Waiting for a photo&hellip;</div>
+      <div id="roleSub" class="sub"></div>
+      <div id="roleGroups" class="rolegroups"></div>
+      <div id="knobs" class="knobs"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== STEP 2 -->
+<section id="step2" class="step">
+  <div class="cols c2">
+    <div class="panel">
+      <h2>2 &middot; Tell it what you need</h2>
+      <p class="sub">Say the spec out loud, in your own words. Gemini 4 Hydrogen turns it into numbers.</p>
+      <button id="btnTalk" class="talk">Hold to talk <kbd>Space</kbd></button>
+      <div id="talkState" class="sub center"></div>
+      <div class="row">
+        <input id="specText" type="text" placeholder='or type: "stable, 70 degrees, 15 megahertz, 60 dB gain, under 60 microamps"'>
+        <button id="btnSpecText" class="big">Read it</button>
+      </div>
+      <div id="transcript" class="bubble" hidden></div>
+    </div>
+    <div class="panel">
+      <div id="specHeadline" class="headline muted">Default spec (say yours to change it)</div>
+      <div id="specCard" class="speccard"></div>
+      <div id="specNotes" class="sub"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== STEP 3 -->
+<section id="step3" class="step">
+  <div class="stagebar">
+    <button id="btnRun" class="big primary">Start the crew <kbd>Enter</kbd></button>
+    <span id="runInfo" class="runinfo">not started</span>
+    <span class="spacer"></span>
+    <span class="small">replay a recorded run:</span>
+    <select id="selReplay"></select>
+    <select id="selSpeed"><option value="4">4x</option><option value="8" selected>8x</option><option value="16">16x</option><option value="1">1x</option></select>
+    <button id="btnReplay">Replay</button>
+    <span id="clock" class="clock">0 s</span>
+  </div>
+  <div class="stage">
+    <div class="col left">
+      <div class="agent architect" id="architect">
+        <div class="ahead"><span class="avatar a-arch">C</span><div><b>Architect</b><small>Gemini 4 Carbon &middot; diagnoses, hands out directions</small></div><span id="archState" class="state"></span></div>
+        <div id="archBubble" class="bubble big-bubble muted">Waiting for the first simulation&hellip;</div>
+        <div id="archBinding" class="binding"></div>
+      </div>
+      <div class="agent critic" id="critic">
+        <div class="ahead"><span class="avatar a-crit">Ne</span><div><b>Plot reviewer</b><small>Gemini 4 Neon &middot; looks at the Bode plot image</small></div><span id="critState" class="state"></span></div>
+        <div class="critbody">
+          <img id="critImg" alt="" hidden>
+          <div id="critNote" class="bubble muted">No plot reviewed yet.</div>
+        </div>
+      </div>
+    </div>
+    <div class="col mid">
+      <div class="agent judge">
+        <div class="ahead"><span class="avatar a-judge">J</span><div><b>The Judge</b><small>ngspice simulator &middot; 5 process corners &times; 3 temperatures &middot; no opinions</small></div><span id="judgeState" class="state"></span></div>
+        <div class="judgebody">
+          <div class="counter"><span id="nPass">0</span><span class="of">/ 15</span><div class="counterlabel">corners pass<br><small id="bestLabel">best design so far</small></div></div>
+          <div class="grid" id="grid"></div>
+        </div>
+        <div class="currentbar">
+          <div class="cblabel"><span>Power: worst-case core current</span><b id="curVal">&ndash;</b></div>
+          <div class="track"><div id="curFill" class="fill"></div><div id="curLimit" class="limit"><span id="curLimitLabel">limit</span></div></div>
+        </div>
+        <div class="metrics" id="metrics"></div>
+        <div class="dotswrap"><div class="small">every design tried (colour = which worker, filled = passes all 15)</div><div id="dots" class="dots"></div></div>
+      </div>
+    </div>
+    <div class="col right">
+      <div class="workershead"><b>Workers</b> <small>Gemini 4 Hydrogen &middot; each explores one direction, in parallel</small></div>
+      <div id="workers" class="workers"></div>
+    </div>
+  </div>
+  <div id="banner" class="banner" hidden><div id="bannerMain"></div><div id="bannerSub"></div></div>
+</section>
+
+<!-- ============================== STEP 4: layout -->
+<section id="step4" class="step">
+  <div class="stagebar">
+    <button id="btnLayout" class="big primary">Lay out the winner <kbd>Enter</kbd></button>
+    <span id="layInfo" class="runinfo">not started</span>
+    <span class="spacer"></span>
+    <span class="small">replay a layout run:</span>
+    <select id="selLayReplay"></select>
+    <button id="btnLayReplay">Replay</button>
+    <span id="layClock" class="clock">0 s</span>
+  </div>
+  <div class="laystage">
+    <div class="agent laymain">
+      <div class="layheads">
+        <div class="laynum"><div class="lab">Chip area</div>
+          <div class="vals"><span id="layArea0">&ndash;</span><i>&rarr;</i><b id="layArea1">&ndash;</b><small>&micro;m&sup2;</small></div><div id="layAreaPct" class="pct"></div></div>
+        <div class="laynum"><div class="lab">Built-in mismatch <small>systematic input offset</small></div>
+          <div class="vals"><span id="layOff0">&ndash;</span><i>&rarr;</i><b id="layOff1">&ndash;</b><small>&micro;V</small></div><div id="layOffPct" class="pct"></div></div>
+        <div id="layBadge" class="laybadge wait">waiting for the first floorplan</div>
+      </div>
+      <div class="floor">
+        <figure><figcaption title="one finger per transistor, no interleaving">Before: naive layout</figcaption><div class="imgbox"><img id="layNaive" alt="" hidden><span class="ph">no floorplan yet</span></div></figure>
+        <div class="arrow">&rarr;</div>
+        <figure><figcaption id="layBestCap">After: the crew's best so far</figcaption><div class="imgbox"><img id="layBest" alt="" hidden><span class="ph">no floorplan yet</span></div></figure>
+      </div>
+      <div class="caption"><b>Layout planning:</b> how many fingers each transistor is split into, how matched pairs are interleaved (ABBA cancels manufacturing gradients), and where each group sits. <b class="caveat">Estimated parasitics &mdash; not routed, no DRC/LVS.</b></div>
+    </div>
+    <div class="col">
+      <div class="agent critic" id="layCritic">
+        <div class="ahead"><span class="avatar a-crit">Ne</span><div><b>Floorplan reviewer</b><small>Gemini 4 Neon &middot; looks at the floorplan image</small></div><span id="layCritState" class="state"></span></div>
+        <div class="critrow"><img id="layCritImg" alt="" hidden><div id="layCritNote" class="bubble muted">No floorplan reviewed yet.</div></div>
+      </div>
+      <div class="workershead"><b>Layout workers</b> <small>Gemini 4 Hydrogen &middot; each proposes a floorplan; the Judge re-simulates it with estimated parasitics</small></div>
+      <div id="layWorkers" class="workers"></div>
+      <div class="dotswrap"><div class="small">every floorplan tried (filled = still passes all 15 corners)</div><div id="layDots" class="dots"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== STEP 5 -->
+<section id="step5" class="step">
+  <div class="cols c2">
+    <div class="panel">
+      <h2>5 &middot; Don't trust it &mdash; verify</h2>
+      <p class="sub"><b>Independent sign-off agent</b> (Managed Agent). It never sees our testbench: it writes its own SPICE and re-measures the winning design.</p>
+      <div class="row">
+        <button id="btnSignoff" class="big primary">Launch sign-off on this run</button>
+        <select id="selSignoff"></select>
+        <button id="btnSignoffShow" class="big">Show recorded</button>
+      </div>
+      <div id="signTrace" class="trace"></div>
+      <div id="signResult" class="signresult"></div>
+    </div>
+    <div class="panel">
+      <h2>Red team</h2>
+      <p class="sub">A second Managed Agent is paid to make the Judge lie: find a design that "passes" but shouldn't.</p>
+      <div id="redteam" class="redteam"><span class="muted">loading&hellip;</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== STEP 6 -->
+<section id="step6" class="step">
+  <div class="panel wide">
+    <h2>6 &middot; Proof <small>pass = all 15 corners &middot; 3 seeds each &middot; every row shows its budget of simulated designs &middot; failures included</small></h2>
+    <div id="proof" class="proof"></div>
+    <div id="cost" class="cost"></div>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
