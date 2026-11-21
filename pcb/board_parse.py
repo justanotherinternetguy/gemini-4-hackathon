@@ -124,16 +124,21 @@ def scene(board: Path) -> dict:
         at = child(fp, "at")
         rot = fnum(at[3]) if at and len(at) > 3 else 0.0
         side = "back" if (child(fp, "layer") or ["", "F.Cu"])[1].startswith("B.") else "front"
-        ref = ""
+        ref = value = ""
         for prop in children(fp, "property"):
             if len(prop) > 2 and prop[1] == "Reference":
                 ref = prop[2]
+            if len(prop) > 2 and prop[1] == "Value":
+                value = prop[2]
         for t in children(fp, "fp_text"):
             if len(t) > 2 and t[1] == "reference":
                 ref = ref or t[2]
+            if len(t) > 2 and t[1] == "value":
+                value = value or t[2]
 
         local_pts: list[tuple[float, float]] = []
         through = False
+        first_pad = len(pads)
         fp_pads = children(fp, "pad")
         for p in fp_pads:
             px, py = xy(child(p, "at"))
@@ -191,7 +196,9 @@ def scene(board: Path) -> dict:
                 w = max(1.0, w - 2.6)
             else:
                 h = max(1.0, h - 2.6)
-        comps.append({"ref": ref, "x": round(cx, 4), "y": round(cy, 4), "w": round(w, 3), "h": round(h, 3),
+        for p in pads[first_pad:]:
+            p["ci"] = len(comps)                  # which component this pad belongs to
+        comps.append({"ref": ref, "value": value, "x": round(cx, 4), "y": round(cy, 4), "w": round(w, 3), "h": round(h, 3),
                       "rot": rot, "side": side, "kind": family, "height": height, "pads": len(fp_pads)})
 
     pts = _outline_points(root) or [(p["x"], p["y"]) for p in pads]
@@ -200,8 +207,17 @@ def scene(board: Path) -> dict:
     margin = 0.0 if _outline_points(root) else 2.0
     bbox = [min(p[0] for p in pts) - margin, min(p[1] for p in pts) - margin,
             max(p[0] for p in pts) + margin, max(p[1] for p in pts) + margin]
+    used = {}
+    for p in pads:
+        if p["net"]:
+            used[p["net"]] = used.get(p["net"], 0) + 1
+    copper_layers = sum(1 for layer in (child(root, "layers") or []) if isinstance(layer, list)
+                        and len(layer) > 1 and str(layer[1]).endswith(".Cu"))
     return {"bbox": [round(v, 4) for v in bbox], "components": comps, "pads": pads,
-            "nets": {str(k): v for k, v in nets.items()}}
+            "nets": {str(k): v for k, v in nets.items()},
+            "summary": {"width_mm": round(bbox[2] - bbox[0], 1), "height_mm": round(bbox[3] - bbox[1], 1),
+                        "components": len(comps), "pads": len(pads),
+                        "nets": sum(1 for n in used.values() if n >= 2), "copper_layers": copper_layers or 2}}
 
 
 SEG_RE = re.compile(

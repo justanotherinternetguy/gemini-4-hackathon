@@ -206,10 +206,15 @@ this page on hackathon rules, this page is right: it comes from the official par
 
 ### On this branch
 
-- `pcb/view3d.py` (with `view3d.html`, `board_parse.py`, `vendor/`): the demo viewer. It builds a
-  3D model of the real board and animates each agent laying its copper, with open connections as a
-  red web and counts from KiCad's checker. Tested today on a made-up four-worker sequence.
-  `cd pcb && python view3d.py --watch <folder> --project <board>.kicad_pro --port 8766`
+- `pcb/view3d.py` (with `view3d.html`, `board_parse.py`, `vendor/`): the demo. Import a board,
+  watch it assemble from the file, press Route, watch each agent lay its copper, then get a
+  verdict from KiCad's checker: a clean pass, or the exact connections left for the engineer.
+  Tested today with made-up workers.
+  `cd pcb && python view3d.py --boards-dir $PCBWORLD_DATA_ROOT/pcbench/exacad_sorted --route-cmd '<your command>'`
+  **`--route-cmd` is how your swarm plugs in.** The page's Route button runs it with these filled
+  in: `{unrouted}` the starting board, `{project}` its `.kicad_pro`, `{out}` the folder to save
+  versions into. Save versions as described above, and exit when finished. Without `--route-cmd`
+  the Route button runs a dummy with fake agents, and the page labels it as test data.
 - `pcb/live_view.py`: the flat 2D fallback viewer with the same counts. Tested today.
   `python pcb/live_view.py --watch <folder> --project <board>.kicad_pro --port 8765`
 - `pcb/make_test_frames.py`: makes a fake step-by-step sequence from a finished board with made-up

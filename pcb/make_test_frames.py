@@ -27,6 +27,10 @@ def main() -> None:
     ap.add_argument("--agents", type=int, default=0, help="credit versions to this many made-up workers")
     ap.add_argument("--per-step", type=int, default=1, help="nets added per version")
     ap.add_argument("--delay", type=float, default=0.0, help="seconds between bursts (0 = write all at once)")
+    ap.add_argument("--no-start", action="store_true", help="do not write the empty starting version "
+                                                            "(the caller already put it there)")
+    ap.add_argument("--leave", type=int, default=0, help="leave this many nets unrouted at the end, "
+                                                         "to test what an unfinished board looks like")
     ap.add_argument("--burst", type=int, default=1, help="versions written back to back before each pause, "
                                                          "so several workers are seen working at once")
     args = ap.parse_args()
@@ -40,6 +44,8 @@ def main() -> None:
     for n in net_of:
         if n not in order:
             order.append(n)
+    if args.leave > 0:
+        order = order[:max(1, len(order) - args.leave)]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -53,8 +59,9 @@ def main() -> None:
         parts.append(text[last:])
         (out / name).write_text("".join(parts))
 
-    write("v000.kicad_pcb", set())
-    print("v000: no copper", flush=True)
+    if not args.no_start:
+        write("v000.kicad_pcb", set())
+        print("v000: no copper", flush=True)
     kept: set[int] = set()
     step = 0
     for i in range(0, len(order), args.per_step):
