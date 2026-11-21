@@ -465,6 +465,8 @@ class H(BaseHTTPRequestHandler):
                     circ = q.get("circuit") if q.get("circuit") in ("diff", "fc", "tele") else None
                     return self.send_json(explain.part(run, q["part"], upto, circ))
                 return self.send_json(explain.overview(run, upto) if run else {"error": "no run"})
+            if u.path == "/api/answer_key":
+                return self.send_json(answer_key(q.get("circuit") if q.get("circuit") in ("diff", "fc", "tele") else "diff"))
             if u.path == "/api/schematic":
                 from demo import explain
                 name = explain.SCHEMATIC.get(q.get("circuit", ""))

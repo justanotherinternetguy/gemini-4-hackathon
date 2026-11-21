@@ -145,14 +145,17 @@ def place(spec, board):
     where = {}   # passive -> (ic, side_left, dy)
     loose = []
 
+    def flip(r):
+        fp = fps[r]
+        fp.SetOrientationDegrees((fp.GetOrientationDegrees() + 180) % 360)
+        x0, y0, x1, y1 = fp_bbox_mm(fp)  # ...and put the reference label back above the part
+        tp = fp.Reference().GetPosition()
+        fp.Reference().SetPosition(pcbnew.VECTOR2I(mm(x0 + x1) - tp.x, mm(y0 + y1) - tp.y))
+
     def turn(r, pin, side_left):
         mdx, _ = pad_local(r, pin)
         if (side_left and mdx < -0.1) or (not side_left and mdx > 0.1):
-            fp = fps[r]
-            fp.SetOrientationDegrees(180)  # turn the connected pin towards the IC
-            x0, y0, x1, y1 = fp_bbox_mm(fp)  # ...and put the reference label back above the part
-            tp = fp.Reference().GetPosition()
-            fp.Reference().SetPosition(pcbnew.VECTOR2I(mm(x0 + x1) - tp.x, mm(y0 + y1) - tp.y))
+            flip(r)  # turn the connected pin towards the IC
 
     def make_direct(r, net):
         oref, opin = ic_pin(net).split(".")
@@ -175,7 +178,7 @@ def place(spec, board):
                 r = a.pop()
                 b.append(r)
                 where[r] = (u, not want_left, where[r][2])
-                fps[r].SetOrientationDegrees(fps[r].GetOrientationDegrees() + 180)
+                flip(r)
     follower = {}
     while todo:
         progress = False

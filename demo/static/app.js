@@ -400,7 +400,7 @@ function layShow(final) {
   if (o0 != null && b.offset_uV != null) {
     const d = Math.abs(o0) - Math.abs(b.offset_uV);
     $("layOff1").className = d > 0 ? "better" : d < 0 ? "worse" : "";
-    $("layOffPct").textContent = Math.abs(o0) > 0 && d > 0 ? `${num(Math.abs(o0) / Math.max(Math.abs(b.offset_uV), 1e-9))}× less mismatch` : d < 0 ? "more mismatch than the naive layout" : "";
+    $("layOffPct").textContent = Math.abs(o0) > 0 && d > 0 ? (Math.abs(b.offset_uV) < 0.005 ? "systematic mismatch cancelled" : `${num(Math.abs(o0) / Math.abs(b.offset_uV))}× less mismatch`) : d < 0 ? "more mismatch than the naive layout" : "";
   }
   const B = $("layBadge");
   if (b.passed) { B.className = "laybadge"; B.textContent = "✓ still passes all 15 corners with layout parasitics"; }

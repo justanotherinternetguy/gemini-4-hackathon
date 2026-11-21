@@ -65,9 +65,14 @@ class Engine:
                                   cwd=PCBW, env=engine_env(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.DEVNULL, text=True, bufsize=1)
 
-    def call(self, op: str, **kw):
+    def call(self, op: str, timeout: float = 240, **kw):
+        import select
         self.p.stdin.write(json.dumps({"op": op, **kw}) + "\n")
         self.p.stdin.flush()
+        ready, _, _ = select.select([self.p.stdout], [], [], timeout)
+        if not ready:                       # a hung router call must not hang the board
+            self.p.kill()
+            raise RuntimeError(f"engine timeout ({timeout:.0f} s) during {op}")
         line = self.p.stdout.readline()
         if not line:
             raise RuntimeError(f"engine died during {op}")
@@ -105,6 +110,65 @@ def scripted_plans(st: dict) -> list[dict]:
     if open_nets:
         plans.append({"name": "rip-open-nets", "ripup": open_nets, "order": open_nets, "mode": 2})
     return plans
+
+
+def random_plans(st: dict, block: dict, n: int, seed: int) -> list[dict]:
+    """Control arm: random rip-up sets drawn from the same candidate blockers the agents see."""
+    import random
+    rng = random.Random(seed)
+    open_nets = [x["net"] for x in st["open_nets"]]
+    cands = sorted({c["net"] for oc in block.get("open_connections", []) for c in oc["candidates"]})
+    plans = []
+    for i in range(n):
+        k = rng.randint(1, max(1, min(4, len(cands)))) if cands else 0
+        rip = rng.sample(cands, k) if cands else []
+        order = open_nets + rip
+        rng.shuffle(order)
+        plans.append({"name": f"random-{i}", "ripup": rip + open_nets if rng.random() < 0.5 else rip,
+                      "order": order, "mode": rng.choice([1, 2]), "by": "random"})
+    return plans
+
+
+CARBON_SLOTS = threading.Semaphore(2)      # Carbon timed out today whenever many calls overlapped
+
+
+def decisions_blockers(board_id: str, block: dict, image: Path, log_dir: Path) -> dict:
+    """Decisions API screen: for each (open connection, candidate net) - is that net's copper
+    really in the way? One call, one yes/no question per pair, calibrated probabilities."""
+    pairs = [(oc, c) for oc in block.get("open_connections", []) for c in oc["candidates"]][:60]
+    if not pairs:
+        return {}
+    c = _client()
+    blocks = [{"type": "text", "text": "PCB after autorouting. Image: red = copper layer 1, blue = layer 2, "
+               "squares = pads, orange dashed = connections still open (labelled by net name), red X = rule errors. "
+               "Coordinates are millimetres as on the axes."}]
+    if image.exists():
+        blocks.append({"type": "image", "mime_type": "image/png", "resolution": "high",
+                       "data": base64.b64encode(image.read_bytes()).decode()})
+    qs = {}
+    for i, (oc, cand) in enumerate(pairs):
+        qs[f"q{i}"] = {"type": "noul", "instructions":
+                       f"The connection of net '{oc['name']}' from ({oc['from'][0]}, {oc['from'][1]}) to "
+                       f"({oc['to'][0]}, {oc['to'][1]}) is still open. Net '{cand['name']}' has copper crossing the "
+                       f"straight path between those two points {cand['crossings']} time(s) on layer(s) "
+                       f"{cand['layers']}. Would removing net '{cand['name']}' copper be needed to complete this "
+                       f"connection on a two-layer board (i.e. it cannot simply be passed on the other layer or "
+                       f"walked around)?",
+                       "criteria": {"true_description": "Yes: this net's copper walls off the connection.",
+                                    "false_description": "No: there is room to go around or use the other layer."}}
+    t0 = time.time()
+    res = c.decisions.create(model=DECIDER, input=blocks, questions=qs)
+    out = {}
+    for i, (oc, cand) in enumerate(pairs):
+        a = res.answers[f"q{i}"]
+        out.setdefault(str(oc["net"]), []).append({"blocker": cand["net"], "name": cand["name"],
+                                                   "p_blocks": round(float(a.noul), 3), "crossings": cand["crossings"]})
+    for k in out:
+        out[k].sort(key=lambda d: -d["p_blocks"])
+    with open(log_dir / "llm_calls.jsonl", "a") as f:
+        f.write(json.dumps({"board": board_id, "model": DECIDER, "latency_s": round(time.time() - t0, 2),
+                            "questions": len(qs), "blockers": out}) + "\n")
+    return out
 
 
 def execute(board_id: str, start: Path, plan: dict, out_dir: Path, tag: str) -> dict:
@@ -196,13 +260,16 @@ def describe(st: dict, nets: dict, max_nets: int = 40) -> str:
 
 
 def llm_plans(board_id: str, st: dict, nets: dict, image: Path, history: list[dict], n_plans: int,
-              model: str, thinking: str, log_dir: Path) -> list[dict]:
+              model: str, thinking: str, log_dir: Path, triage: dict | None = None) -> list[dict]:
     c = _client()
     hist = "\n".join(
         f"- plan {h['plan'].get('name')}: ripup={h['plan'].get('ripup')} order={h['plan'].get('order')} "
         f"mode={h['plan'].get('mode')} -> open={h.get('end_status', {}).get('unrouted')} "
         f"errors={h.get('end_status', {}).get('drc_errors')} clean={h.get('score', {}).get('clean_pass')}"
+        f" still-open-after={[r['net'] for r in h.get('route_log', []) if r.get('open_left')][:10]}"
         for h in history[-12:]) or "(none yet)"
+    tri = ("BLOCKER SCREEN (a yes/no model looked at the picture; p = probability that removing that net is "
+           "needed to complete the open connection):\n" + json.dumps(triage)[:2500]) if triage else ""
     prompt = f"""You are a PCB layout engineer repairing an auto-routed board. A classic autorouter left it with
 open connections and/or design-rule errors. You cannot draw copper yourself. You choose:
 which nets to RIP UP (delete their copper), the ORDER in which nets are re-routed, and the router MODE
@@ -215,6 +282,8 @@ open connections (orange dashed, labelled with the net name), rule errors (red X
 
 {describe(st, nets)}
 
+{tri}
+
 ATTEMPTS SO FAR ON THIS BOARD:
 {hist}
 
@@ -225,9 +294,17 @@ plan that already failed). Use net CODES (integers)."""
         blocks.append({"type": "image", "mime_type": "image/png",
                        "data": base64.b64encode(image.read_bytes()).decode()})
     t0 = time.time()
-    r = c.interactions.create(model=model, input=blocks, generation_config={"thinking_level": thinking},
-                              response_format={"type": "text", "mime_type": "application/json", "schema": PLAN_SCHEMA},
-                              timeout=150)
+    gate = CARBON_SLOTS if model == PLANNER else None
+    if gate:
+        gate.acquire()
+    try:
+        r = c.interactions.create(model=model, input=blocks, generation_config={"thinking_level": thinking},
+                                  response_format={"type": "text", "mime_type": "application/json",
+                                                   "schema": PLAN_SCHEMA},
+                                  timeout=120 if model == PLANNER else 75)
+    finally:
+        if gate:
+            gate.release()
     out = json.loads(r.output_text)
     with open(log_dir / "llm_calls.jsonl", "a") as f:
         f.write(json.dumps({"board": board_id, "model": model, "latency_s": round(time.time() - t0, 1),
@@ -258,6 +335,7 @@ def repair_board(board_id: str, start: Path, a) -> dict:
         nets = eng.call("nets")
         img = out_dir / "start.png"
         eng.call("render", path=str(img))
+        block = eng.call("blockers") if not st["clean"] else {"open_connections": []}
         s0 = out_dir / f"{board_id}__start.kicad_pcb"
         eng.call("save", path=str(s0))
         base_score = eng.call("score", path=str(s0), project=str(f["pro"]))
@@ -269,28 +347,58 @@ def repair_board(board_id: str, start: Path, a) -> dict:
     result = {"board": board_id, "start": {"unrouted": st["unrouted"], "drc_errors": st["drc_errors"],
                                            "clean_pass": base_score.get("clean_pass")}}
     attempts = 0
+    triage = {}
+    (out_dir / "blockers.json").write_text(json.dumps(block, indent=1))
     if not base_score.get("clean_pass"):
-        rounds = [("scripted", scripted_plans(st))]
+        if not a.no_llm:
+            try:
+                triage = decisions_blockers(board_id, block, img, out_dir)
+                (out_dir / "triage.json").write_text(json.dumps(triage, indent=1))
+            except Exception as e:
+                print(f"  [{board_id}] decisions screen failed: {str(e)[:140]}", flush=True)
+        rounds = [("scripted", [] if a.skip_scripted else scripted_plans(st))]
+        if triage:      # rip the nets the screen is most sure about
+            sure = sorted({b["blocker"] for bl in triage.values() for b in bl if b["p_blocks"] >= 0.6})
+            open_nets = [x["net"] for x in st["open_nets"]]
+            if sure:
+                rounds[0][1].append({"name": "rip-screened-blockers", "ripup": sure, "order": open_nets + sure,
+                                     "mode": 2, "by": DECIDER})
         for rnd in range(a.rounds):
             rounds.append((f"llm{rnd}", None))
+        if a.no_llm:        # equal-attempt control: scripted plans topped up with random rip-up plans
+            rounds.append(("random", random_plans(st, block, max(0, a.max_attempts - len(rounds[0][1])), a.seed)))
+        carbon_pool = ThreadPoolExecutor(1)
+        carbon_fut = None
         for name, plans in rounds:
             if any(h.get("score", {}).get("clean_pass") for h in history):
                 break
             if plans is None:
                 if a.no_llm:
-                    break
+                    continue
                 plans = []
+                if carbon_fut is not None and carbon_fut.done():      # a Carbon plan that landed late joins now
+                    try:
+                        plans += carbon_fut.result()
+                    except Exception as e:
+                        print(f"  [{board_id}] carbon plan failed: {str(e)[:100]}", flush=True)
+                    carbon_fut = None
+                if carbon_fut is None:
+                    carbon_fut = carbon_pool.submit(llm_plans, board_id, st, nets, img, list(history), 2, PLANNER,
+                                                    "medium", out_dir, triage)
                 try:
-                    with ThreadPoolExecutor(2) as ex:
-                        fut_c = ex.submit(llm_plans, board_id, st, nets, img, history, 2, PLANNER, "medium", out_dir)
-                        fut_h = ex.submit(llm_plans, board_id, st, nets, img, history, a.workers, WORKER, "medium", out_dir)
-                        for fut in (fut_h, fut_c):
-                            try:
-                                plans += fut.result(timeout=170)
-                            except Exception as e:
-                                print(f"  [{board_id}] planner failed: {str(e)[:120]}", flush=True)
+                    plans += llm_plans(board_id, st, nets, img, history, a.workers, WORKER, "medium", out_dir, triage)
                 except Exception as e:
-                    print(f"  [{board_id}] planning error: {e}", flush=True)
+                    print(f"  [{board_id}] hydrogen plans failed: {str(e)[:120]}", flush=True)
+                if carbon_fut.done():
+                    try:
+                        plans += carbon_fut.result()
+                    except Exception as e:
+                        print(f"  [{board_id}] carbon plan failed: {str(e)[:100]}", flush=True)
+                    carbon_fut = None
+                seen = {json.dumps([h["plan"].get("ripup"), h["plan"].get("order"), h["plan"].get("mode")])
+                        for h in history}
+                plans = [p for p in plans
+                         if json.dumps([p.get("ripup"), p.get("order"), p.get("mode")]) not in seen]
             plans = plans[: a.max_attempts - attempts]
             if not plans:
                 continue
@@ -340,6 +448,8 @@ def main() -> None:
     ap.add_argument("--max-attempts", type=int, default=16)
     ap.add_argument("--parallel", type=int, default=4, help="engine processes per board")
     ap.add_argument("--boards-parallel", type=int, default=3)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--skip-scripted", action="store_true", help="testing: go straight to the agents")
     a = ap.parse_args()
     ids_file = DATA / "subset_work" / "ids.json"
     ids = json.loads(ids_file.read_text()) if ids_file.exists() else {}

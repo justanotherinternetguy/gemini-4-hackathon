@@ -30,9 +30,11 @@ const TERM_RX = [
   [/rule errors?|\bDRC\b/, "drc"], [/open connections?|unrouted/i, "unrouted"], [/\bABBA\b/, "abba"], [/input offset|mismatch/i, "offset"],
   [/Miller|compensation/, "comp"],
 ];
+const PARTSHORT = { in: "Input pair", tail: "Tail", load: "Load", drv: "Driver", sink: "Sink", psrc: "P source", pcas: "P cascode", ncas: "N cascode", nsink: "N sink", comp: "Cc + Rz", bias: "Bias" };
 const X = { view: null, run: null, n: null, ov: {}, askTab: "ask" };
 const jget = async (u) => (await fetch(u)).json();
-const curRun = () => (R && R.id) || S.run || QS.get("replay") || ($("selReplay") && $("selReplay").value) || "";
+const curRun = () => (R && R.id) || S.run || QS.get("replay") || "";                                   // the run on stage
+const askRun = () => curRun() || ($("selReplay") && $("selReplay").value) || "";                          // asking needs some run: fall back to the newest recording
 const upto = (run) => (R && R.id === run && !R.done && R.cands.length ? Math.max(...R.cands.map((c) => c.n)) : 0);
 const partChip = (p, label) => `<button class="pchip" data-part="${esc(p)}" style="border-color:${PARTCOL[p] || "#777"}"><i style="background:${PARTCOL[p] || "#777"}"></i>${esc(label || PARTNAME[p] || p)}</button>`;
 const candLink = (n, txt) => `<button class="clink" data-cand="${n}">${txt || "#" + n}</button>`;
@@ -42,6 +44,7 @@ const g4 = (v) => v == null ? "–" : String(+(+v).toPrecision(4));
 /* ------------------------------------------------------------------ drawer */
 function openDrawer(title, html, view) {
   X.view = view; $("drawerTitle").innerHTML = title; $("drawerBody").innerHTML = html;
+  $("drawer").style.top = document.querySelector("header").offsetHeight + "px";
   $("drawer").hidden = false; document.body.classList.add("drawer-open"); $("drawerBody").scrollTop = 0; markTerms($("drawerBody"));
 }
 function closeDrawer() { $("drawer").hidden = true; document.body.classList.remove("drawer-open"); X.view = null; hideTip(); }
@@ -52,7 +55,7 @@ const loading = (t) => openDrawer(t, '<p class="muted">loading the recorded data
 async function openPart(part, opts = {}) {
   const run = opts.run || curRun();
   loading(esc(PARTNAME[part] || part));
-  const circuit = opts.circuit || (S.roles && S.roles.circuit) || "";
+  const circuit = opts.circuit || (S.step === 1 && S.roles && S.roles.circuit) || "";
   let d;
   try { d = await jget(`/api/explain?part=${encodeURIComponent(part)}&run=${encodeURIComponent(run)}&upto=${upto(run)}&circuit=${encodeURIComponent(circuit)}`); }
   catch (err) { return openDrawer("Part", `<p class="warnbox">Could not load: ${esc(err)}</p>`, "part"); }
@@ -69,8 +72,8 @@ async function openPart(part, opts = {}) {
       `<p class="src">allowed range: ${d.knobs.map((k) => `${esc(k.knob)} ${g4(k.lo)}–${g4(k.hi)} ${k.unit}`).join(" · ")}</p>`;
   } else h += `<p class="muted">No knob of its own in this circuit: its size is fixed by the frozen bias network.</p>`;
   if (d.sat) {
-    h += `<h4>Worst saturation margin</h4><div class="satbox ${d.sat.ok ? "ok" : "no"}"><b>${d.sat.worst_mv} mV</b> at corner <b class="cornertag">${esc(d.sat.at)}</b>
-      <span>needs ≥ ${d.sat.required_mv} mV ${d.sat.ok ? "✓" : "✗"}</span></div>
+    h += `<h4>Worst saturation margin</h4><div class="satbox ${d.sat.ok ? "ok" : "no"}"><span class="satv"><b>${d.sat.worst_mv} mV</b> at corner <b class="cornertag">${esc(d.sat.at)}</b></span>
+      <span class="need noterm">needs ≥ ${d.sat.required_mv} mV ${d.sat.ok ? "✓" : "✗"}</span></div>
       <p class="src">${d.sat.published_mv != null ? `Published design: ${d.sat.published_mv} mV at ${esc(d.sat.published_at)}. ` : ""}Source: ${esc(d.sat.source)}. ${candLink(d.sat.n, "Open design #" + d.sat.n)}</p>`;
   } else if (d.sat_required_mv != null) h += `<p class="src">The Judge requires ≥ ${d.sat_required_mv} mV of saturation margin on this part at every corner (plus the guard band).</p>`;
   if (d.as_of) {
@@ -147,7 +150,7 @@ const ASK_SUGGEST = ["Why did the first design fail?", "Which corner was the har
 const CHG_SUGGEST = ["Make it faster, I can spend more power", "Halve the power budget", "I need 70 degrees of phase margin"];
 function openAsk(tab) {
   X.askTab = tab || X.askTab || "ask";
-  const ask = X.askTab === "ask", run = curRun();
+  const ask = X.askTab === "ask", run = askRun();
   openDrawer("Talk to the crew", `<div class="tabs"><button class="${ask ? "on" : ""}" data-asktab="ask">Ask a question</button><button class="${ask ? "" : "on"}" data-asktab="change">Request a change</button></div>
     <p class="src">${ask ? `Gemini 4 Argon answers from the recorded simulations and agent messages of run <code>${esc(run || "none yet")}</code>, and cites them.` : `Say what you want differently. Gemini 4 Argon turns it into a new spec; you confirm before the crew re-runs.`}</p>
     <textarea id="askText" rows="2" placeholder="${ask ? "e.g. Why did design #6 fail?" : "e.g. make it faster, I can spend more power"}"></textarea>
@@ -176,7 +179,7 @@ function holdToTalk(btn, onBlob, state) {
 }
 const b64 = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(",")[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
 async function sendAsk({ blob }) {
-  const text = $("askText").value.trim(), ask = X.askTab === "ask", run = curRun();
+  const text = $("askText").value.trim(), ask = X.askTab === "ask", run = askRun();
   if (!blob && !text) return;
   const O = $("askOut"); $("askState").textContent = ""; $("askSend").disabled = true;
   O.innerHTML = `<p class="thinking">Gemini 4 Argon is ${blob ? "listening, then " : ""}${ask ? "reading the run's simulations and agent messages" : "working out the new spec"}…</p>`;
@@ -233,7 +236,7 @@ function openGlossary() {
 }
 function markTerms(root) {
   if (!root) return;
-  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.nodeValue.length < 4 || n.parentElement.closest(".term,button,select,textarea,input,pre,code,script,kbd,.noterm,nav") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.nodeValue.length < 4 || n.parentElement.closest(".term,button,select,textarea,input,pre,code,script,kbd,.noterm,nav,.laybadge,.badge,.pill,.state,.banner,.clock,.toast") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
   const nodes = []; while (tw.nextNode()) nodes.push(tw.currentNode);
   for (const n of nodes) {
     for (const [rx, key] of TERM_RX) {
@@ -295,19 +298,20 @@ function renderPcb() {
     return;
   }
   P.run = run.id;
-  const clean = run.boards.filter((b) => b.final && b.final.clean_pass).length;
-  $("pcbInfo").innerHTML = `<b>${esc(run.id)}</b> · ${run.boards.length} board${run.boards.length === 1 ? "" : "s"}` + (run.done ? ` · <b>${clean}</b> ended as a clean pass` : " · still running");
+  const clean = run.boards.filter((b) => b.final && b.final.clean_pass).length, clean0 = run.boards.filter((b) => b.start && b.start.clean_pass).length;
+  $("pcbInfo").innerHTML = `<b>${esc(run.id)}</b> · ${run.boards.length} board${run.boards.length === 1 ? "" : "s"}` + (run.done ? ` · clean pass: ${clean0} before → <b>${clean}</b> after` : " · still running") + (run.summary && run.summary.llm === false ? " · control run (no agents)" : "");
   B.className = "boards n" + Math.min(run.boards.length, 4);
   B.innerHTML = run.boards.map((b) => {
-    const ok = b.final && b.final.clean_pass, st0 = b.start || {};
-    const head = b.running ? `still routing… ${b.attempts || 0} attempt${b.attempts === 1 ? "" : "s"} so far` :
-      `${stat(st0)} → ` + (ok ? "<b class='okt'>clean</b>" : b.final ? `<b class='badt'>${stat(b.final)} left</b>` : "<b class='badt'>no result</b>");
+    const ok = b.final && b.final.clean_pass, st0 = b.start || {}, was = st0.clean_pass && b.best_tag === "start" || (st0.clean_pass && !b.attempts);
+    const head = was ? "already clean after the classic autorouter: nothing to repair" : b.running && !b.final ? `waiting or routing… ${b.attempts || 0} attempt${b.attempts === 1 ? "" : "s"} so far` :
+      (b.provisional ? "so far: " : "") +
+      `${stat(st0)} → ` + (ok ? "<b class='okt'>clean</b>" : b.final && b.final.unrouted != null ? `<b class='badt'>${stat(b.final)} left</b>${b.improved ? " (better, not clean)" : ""}` : b.final ? "<b class='badt'>not clean</b>" : "<b class='badt'>no result</b>");
     const plan = b.best_plan || {};
-    return `<div class="board ${ok ? "ok" : b.running ? "" : "no"}"><div class="bh"><b>${esc(b.board_id)}</b><span class="pill ${ok ? "ok" : b.running ? "" : "no"}">${ok ? "✓ clean pass" : b.running ? "running" : "✗ not clean"}</span></div>
+    return `<div class="board ${ok ? "ok" : b.running ? "" : "no"}"><div class="bh"><b title="${esc(b.board_id)}">${esc(b.board_id.replace(/^\d+_/, ""))}</b><span class="pill ${ok ? "ok" : b.running ? "" : "no"}">${was ? "✓ clean from the start" : ok ? "✓ clean pass" : b.running ? "in progress" : "✗ not clean"}</span></div>
       <div class="bimgs"><figure><div class="imgbox">${b.has_start ? `<img src="${pcbImg(run.id, b.board_id, "start.png")}" alt="">` : `<span class="ph">no picture</span>`}</div><figcaption>before</figcaption></figure>
       <figure><div class="imgbox">${b.has_final ? `<img src="${pcbImg(run.id, b.board_id, "final.png")}" alt="">` : `<span class="ph">${b.running ? "routing…" : "no final picture recorded"}</span>`}</div><figcaption>after</figcaption></figure></div>
       <div class="bstat">${head}</div>
-      ${plan.name || b.plan_words ? `<div class="bplan"><small>${ok ? "the repair plan that won" : "best plan tried"}${b.best_tag ? " · " + esc(b.best_tag) : ""}</small><b>${esc(plan.name || "")}</b> ${esc(b.plan_words || "")}${plan.why ? `<div class="whyr">“${esc(clip(plan.why, 260))}”</div>` : ""}</div>` : (b.running ? "" : `<div class="bplan muted">No repair plan recorded.</div>`)}
+      ${was ? "" : b.best_tag === "start" ? `<div class="bplan muted">No repair attempt has beaten the starting board${b.running ? " so far" : ""}.</div>` : plan.name || b.plan_words ? `<div class="bplan"><small>${ok ? "the repair plan that won" : "best plan tried"}${b.best_tag ? " · " + esc(b.best_tag) : ""}</small><b>${esc(plan.name ? plan.name + "." : "")}</b> ${esc(b.plan_words || "")}${plan.why ? `<div class="whyr">“${esc(clip(plan.why, 260))}”</div>` : ""}</div>` : (b.running ? "" : `<div class="bplan muted">No repair plan recorded.</div>`)}
       <div class="battempts" data-board="${esc(b.board_id)}"><small>${typeof b.attempts === "number" ? b.attempts : (b.attempts || []).length} attempts (click one):</small> <span class="muted">loading…</span></div></div>`;
   }).join("") || `<div class="empty"><b>This run has no boards yet.</b></div>`;
   for (const b of run.boards) loadAttempts(run.id, b.board_id);
@@ -325,10 +329,10 @@ function openAttempt(board, i) {
   const plan = a.plan || {}, es = a.end_status || {}, ok = (a.score && a.score.clean_pass) || es.clean;
   const diag = (d.llm || []).filter((l) => l.diagnosis).map((l) => l.diagnosis);
   openDrawer(`${esc(board)} · attempt ${esc(a.tag || +i + 1)}`, `<div class="verdict ${ok ? "ok" : "no"}">${ok ? "✓ clean pass" : `✗ ${stat(es)} left`}</div>
-    <h4>1 · The plan</h4><p><b>${esc(plan.name || "(unnamed plan)")}</b></p><p>${esc(a.plan_words || "No rip-up: route what is open as it stands.")}</p>${plan.why ? `<div class="whyr big">“${esc(plan.why)}”</div>` : ""}
+    <h4>1 · The plan</h4><p><b>${esc(plan.name || "(unnamed plan)")}</b></p><p>${esc(a.plan_words || (a.tag === "start" ? "The board exactly as the classic autorouter left it: the starting point, before any repair." : "No rip-up: route what is open as it stands."))}</p>${plan.by ? `<p class="src">proposed by ${esc(plan.by)}</p>` : ""}${plan.why ? `<div class="whyr big">“${esc(plan.why)}”</div>` : ""}
     <details><summary>plan as the agent wrote it</summary><pre>${esc(JSON.stringify(plan, null, 1))}</pre></details>
     <h4>2 · What the Judge said</h4><table class="xt"><tr><td>Open connections left</td><td><b>${es.unrouted ?? "?"}</b></td></tr><tr><td>Rule errors (DRC)</td><td><b>${es.drc_errors ?? "?"}</b></td></tr>
-      <tr><td>Clean pass</td><td><b>${ok ? "yes" : "no"}</b></td></tr>${a.seconds != null ? `<tr><td>Router time</td><td><b>${(+a.seconds).toFixed(1)} s</b></td></tr>` : ""}</table>
+      <tr><td>Clean pass</td><td><b>${ok ? "yes" : "no"}</b></td></tr>${a.score && a.score.routability != null ? `<tr><td>Connections completed</td><td><b>${(a.score.routability * 100).toFixed(1)}%</b></td></tr>` : ""}${a.error ? `<tr class="bad"><td>Router error</td><td>${esc(clip(a.error, 160))}</td></tr>` : ""}${a.seconds != null ? `<tr><td>Router time</td><td><b>${(+a.seconds).toFixed(1)} s</b></td></tr>` : ""}</table>
     <details><summary>full score</summary><pre>${esc(JSON.stringify(a.score || {}, null, 1))}</pre></details>
     ${diag.length ? `<h4>3 · The agent's diagnosis of this board</h4>${diag.slice(-2).map((x) => `<div class="quote2">${esc(clip(x, 700))}</div>`).join("")}` : ""}
     <p class="src">Source: runs/pcb/${esc(P.run)}/${esc(board)}/history.json, attempt ${+i + 1}; the judge is the router's own connectivity and rule check.</p>`, "pcb");
@@ -340,10 +344,10 @@ async function partsStrip(target, run, circuit) {
   let html = "";
   try {
     const d = run ? await jget(`/api/explain?run=${encodeURIComponent(run)}&upto=1`) : null;
-    if (d && d.parts) { X.ov[run] = d; html = d.parts.map((p) => partChip(p.part, p.name.replace(/ \(.*/, ""))).join(""); }
+    if (d && d.parts) { X.ov[run] = d; html = d.parts.map((p) => partChip(p.part, PARTSHORT[p.part] || p.name)).join(""); }
   } catch (err) { /* offline */ }
-  if (!html) html = ["in", "tail", "load", "drv", "sink", "comp", "bias"].map((p) => partChip(p)).join("");
-  $(target).innerHTML = `<span class="small noterm">parts (click to explore):</span>` + html;
+  if (!html) html = ["in", "tail", "load", "drv", "sink", "comp", "bias"].map((p) => partChip(p, PARTSHORT[p])).join("");
+  $(target).innerHTML = `<span class="small noterm">parts:</span>` + html;
 }
 const _onEvent = onEvent;
 onEvent = function (e) {   // eslint-disable-line no-global-assign
@@ -392,4 +396,5 @@ document.addEventListener("keydown", (e) => {
 }, true);
 markTerms(document.body);
 if (QS.get("step") === "7") go(7);
-if (QS.get("open")) setTimeout(() => { const o = QS.get("open"); if (/^\d+$/.test(o)) openCand(+o); else if (o === "ask") openAsk(QS.get("tab") || "ask"); else if (o === "glossary") openGlossary(); else if (o === "plans") openPlans(); else openPart(o); if (QS.get("q")) setTimeout(() => { $("askText").value = QS.get("q"); sendAsk({}); }, 200); }, +(QS.get("open_after") || 1500));
+if (QS.get("roles_key")) jget("/api/answer_key?circuit=" + encodeURIComponent(QS.get("roles_key"))).then((r) => { if (!r.error) renderRoles(r); });   // test hook: answer-key roles without a photo
+if (QS.get("open")) setTimeout(() => { const o = QS.get("open"); if (/^\d+$/.test(o)) openCand(+o); else if (o === "ask") openAsk(QS.get("tab") || "ask"); else if (o === "glossary") openGlossary(); else if (o === "plans") openPlans(); else if (o.startsWith("lay:")) openLay(o.slice(4)); else if (o.startsWith("att:")) openAttempt(o.split(":")[1], o.split(":")[2]); else openPart(o); if (QS.get("q")) setTimeout(() => { $("askText").value = QS.get("q"); sendAsk({}); }, 200); }, +(QS.get("open_after") || 1500));

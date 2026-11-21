@@ -248,7 +248,7 @@ nav button.ask{background:var(--accent);border-color:var(--accent);color:#fff;fo
 .term{border-bottom:.12em dotted var(--muted);cursor:help}
 .tip{position:fixed;z-index:80;max-width:26rem;background:var(--ink);color:#fff;border-radius:.6rem;padding:.6rem .8rem;font-size:1rem;line-height:1.3;box-shadow:0 .4rem 1.5rem rgba(0,0,0,.3);pointer-events:none}
 .tip b{display:block;font-size:1.05rem;margin-bottom:.15rem;color:#9cc7ff}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(39rem,96vw);background:#fff;border-left:3px solid var(--ink);box-shadow:-1rem 0 3rem rgba(0,0,0,.22);z-index:60;display:flex;flex-direction:column;animation:drawerin .18s ease-out}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(34.2rem,96vw);background:#fff;border-left:3px solid var(--ink);box-shadow:-1rem 0 3rem rgba(0,0,0,.22);z-index:60;display:flex;flex-direction:column;animation:drawerin .18s ease-out}
 @keyframes drawerin{from{transform:translateX(3rem);opacity:0}}
 .drawerhead{display:flex;align-items:center;gap:.6rem;padding:.6rem 1rem;border-bottom:2px solid var(--line);flex:none}
 .drawerhead h3{margin:0;font-size:1.6rem;flex:1;display:flex;align-items:center;gap:.5rem}
@@ -271,8 +271,9 @@ nav button.ask{background:var(--accent);border-color:var(--accent);color:#fff;fo
 .xt{font-size:1rem}.xt th{font-size:.8rem}.xt td.up{color:var(--warn);font-weight:700;white-space:nowrap}.xt td.down{color:var(--accent);font-weight:700;white-space:nowrap}
 .xt tr.bad td{color:var(--bad)}
 .satbox{border:2px solid var(--good);border-radius:.6rem;padding:.4rem .7rem;font-size:1.1rem}
-.satbox b{font-size:1.5rem}.satbox span{float:right;font-weight:700;color:var(--good);margin-top:.4rem}
-.satbox.no{border-color:var(--bad)}.satbox.no span{color:var(--bad)}
+.satbox b{font-size:1.5rem}.satbox .need{float:right;font-weight:700;color:var(--good);margin-top:.4rem}
+.satbox.no{border-color:var(--bad)}.satbox.no .need{color:var(--bad)}
+.drawer[hidden],.tip[hidden]{display:none}
 .cornertag{background:#eeede8;border-radius:.3rem;padding:0 .3rem;font-weight:700;white-space:nowrap}
 .clink{font:inherit;font-weight:800;color:var(--accent);background:#eaf2fc;border:0;border-radius:.3rem;padding:0 .3rem;cursor:pointer}
 .clink:hover{background:var(--accent);color:#fff}
@@ -326,7 +327,7 @@ nav button.ask{background:var(--accent);border-color:var(--accent);color:#fff;fo
 /* step 7: boards */
 #step7 .stagebar h2{white-space:nowrap}
 .boards{flex:1;min-height:0;display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:minmax(0,1fr);gap:.7rem;overflow:auto}
-.boards.n1{grid-template-columns:1fr}.boards.n3,.boards.n4{grid-template-columns:repeat(2,1fr)}
+.boards.n1{grid-template-columns:1fr}.boards.n3,.boards.n4{grid-template-columns:repeat(3,1fr);grid-auto-rows:minmax(30rem,1fr)}
 .board{background:#fff;border:2px solid var(--line);border-top:.5rem solid var(--muted);border-radius:.8rem;padding:.5rem .8rem;display:flex;flex-direction:column;gap:.35rem;min-height:0;overflow:hidden}
 .board.ok{border-top-color:var(--good)}.board.no{border-top-color:var(--bad)}
 .bh{display:flex;align-items:center;font-size:1.3rem}
@@ -339,3 +340,13 @@ nav button.ask{background:var(--accent);border-color:var(--accent);color:#fff;fo
 .att.ok{border-color:var(--good);color:#fff;background:var(--good)}
 .empty{grid-column:1/-1;align-self:center;justify-self:center;max-width:46rem;text-align:center;font-size:1.2rem;color:var(--ink2);border:3px dashed var(--line);border-radius:1rem;padding:2rem}
 .empty b{font-size:1.6rem;color:var(--ink)}
+.stage{grid-template-columns:minmax(0,27fr) minmax(0,38fr) minmax(0,35fr)}
+.ahead>div{min-width:0}.ahead .state{white-space:normal;text-align:right;max-width:55%;line-height:1.15}
+.judgebody{overflow:hidden}
+.chg .vals small{margin-left:.4rem}
+.ahead .state{flex:0 0 auto;max-width:60%}
+.satbox{display:flex;align-items:baseline;flex-wrap:wrap;gap:.2rem .8rem}.satbox .need{float:none;margin:0 0 0 auto}
+body.drawer-open .step:not(#step3){padding-right:calc(min(34.2rem,96vw) + 1rem)}
+body.drawer-open .layheads{flex-wrap:wrap}body.drawer-open .laybadge{flex:1 1 100%;font-size:1.05rem;padding:.3rem .8rem}
+body.drawer-open .laynum .vals{font-size:2rem}body.drawer-open .laynum .vals span{font-size:1.5rem}
+.bh{gap:.5rem}.bh b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

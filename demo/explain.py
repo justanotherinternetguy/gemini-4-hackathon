@@ -283,9 +283,10 @@ def static_part(part: str, circuit: str) -> dict:
 
 def part(run: str, name: str, upto: int | None = None, circuit: str | None = None) -> dict:
     R = load_run(run, upto) if run else {"hist": []}
-    if not R["hist"]:
+    if not R["hist"] or (circuit and R["circuit"] != circuit):
         out = static_part(name, circuit or (R.get("circuit") if run else None) or "diff")
-        out["note"] = "No crew run loaded yet: showing the published design only."
+        out["note"] = (f"The crew run on stage ({run}) sized a different circuit, so only the published design is shown."
+                       if R["hist"] else "No crew run loaded yet: showing the published design only.")
         return out
     out = static_part(name, R["circuit"])
     best, pub = R["best"], R["published"]
@@ -668,21 +669,52 @@ def change(run: str, text: str = "", audio: bytes | None = None, mime: str = "",
 
 
 # --------------------------------------------------------------------------- 6. PCB boards
-def pcb_plan_words(plan: dict | None) -> str:
+def _pcb_names(bd: Path, hist: list) -> dict:
+    """net number -> net name, from blockers.json and from 'net 4 (/BATT5V)' in the agents' own text."""
+    names: dict[str, str] = {}
+    bl = read_json(bd / "blockers.json") or {}
+    for oc in (bl.get("open_connections") or []) if isinstance(bl, dict) else []:
+        if isinstance(oc, dict) and oc.get("name") is not None:
+            names[str(oc.get("net"))] = str(oc["name"])
+        for c in oc.get("candidates") or [] if isinstance(oc, dict) else []:
+            if isinstance(c, dict) and c.get("name") is not None and c.get("net") is not None:
+                names[str(c["net"])] = str(c["name"])
+    for h in hist:
+        for m in re.finditer(r"net (\d+) \(([^)]{1,40})\)", str((h.get("plan") or {}).get("why", "")) if isinstance(h, dict) else ""):
+            names.setdefault(m.group(1), m.group(2))
+    return names
+
+
+def pcb_plan_words(plan: dict | None, names: dict | None = None) -> str:
     if not isinstance(plan, dict) or not plan:
         return ""
+    names = names or {}
+    nm = lambda n: (f"{names[str(n)]} (net {n})" if str(n) in names else (f"net {n}" if isinstance(n, int) else str(n)))
     bits = []
     rip, order, mode = plan.get("ripup") or [], plan.get("order") or [], plan.get("mode")
     if rip:
-        bits.append("ripped up " + ("nets " if len(rip) > 1 else "net ") + ", ".join(map(str, rip[:8])) + ("…" if len(rip) > 8 else ""))
+        bits.append("ripped up " + ", ".join(nm(n) for n in rip[:8]) + ("…" if len(rip) > 8 else ""))
     if order:
-        bits.append("re-routed in this order: " + " → ".join(map(str, order[:8])) + ("…" if len(order) > 8 else ""))
-    if mode:
+        bits.append(("re-routed in this order: " if rip else "routed in this order: ") + " → ".join(nm(n) for n in order[:8]) + ("…" if len(order) > 8 else ""))
+    if mode is not None:
         m = str(mode).lower()
-        bits.append({"shove": "router allowed to shove existing tracks aside", "walkaround": "router had to walk around existing tracks",
-                     "highlight": "router stops at collisions"}.get(m, f"router mode: {mode}"))
+        bits.append({"1": "router allowed to shove other copper aside", "shove": "router allowed to shove other copper aside",
+                     "2": "router had to walk around existing copper", "walkaround": "router had to walk around existing copper"}.get(m, f"router mode {mode}"))
     s = "; ".join(bits)
     return (s[:1].upper() + s[1:] + ".") if s else ""
+
+
+def _pcb_hist(bd: Path) -> list:
+    hist = read_json(bd / "history.json") or []
+    if isinstance(hist, dict):
+        hist = hist.get("attempts") or hist.get("history") or []
+    return [h for h in hist if isinstance(h, dict)]
+
+
+def _status(es: dict | None) -> dict | None:
+    if not isinstance(es, dict) or "unrouted" not in es:
+        return None
+    return {"unrouted": es.get("unrouted"), "drc_errors": es.get("drc_errors"), "clean_pass": bool(es.get("clean", es.get("clean_pass")))}
 
 
 def pcb_runs() -> dict:
@@ -690,33 +722,58 @@ def pcb_runs() -> dict:
     if PCB.exists():
         for d in sorted([p for p in PCB.iterdir() if p.is_dir() and not p.name.startswith("_")], key=lambda p: p.stat().st_mtime, reverse=True):
             s = read_json(d / "summary.json")
-            boards = []
-            src = (s or {}).get("boards") if isinstance(s, dict) else None
+            src = None
+            if isinstance(s, dict):
+                src = s.get("boards") if isinstance(s.get("boards"), (list, dict)) else s.get("results")
             if isinstance(src, dict):
                 src = [dict(v, board_id=k) if isinstance(v, dict) else {"board_id": k} for k, v in src.items()]
-            for b in src or []:
-                bid = str(b.get("board_id") or b.get("id") or b.get("board") or b.get("name") or "")
+            if not isinstance(src, list):   # run in progress (or unknown summary): list the board folders that exist so far
+                src = [{"board_id": bd.name, "running": s is None} for bd in sorted(p for p in d.iterdir() if p.is_dir())
+                       if (bd / "start.png").exists() or (bd / "history.json").exists()]
+            boards = []
+            for b in src:
+                if not isinstance(b, dict):
+                    continue
+                bid = str(b.get("board_id") or b.get("board") or b.get("id") or b.get("name") or "")
                 bd = d / bid
-                boards.append({**b, "board_id": bid, "has_start": (bd / "start.png").exists(), "has_final": (bd / "final.png").exists(),
-                               "plan_words": pcb_plan_words(b.get("best_plan"))})
-            if s is None:   # run in progress: list board folders that exist so far
-                for bd in sorted(p for p in d.iterdir() if p.is_dir()):
-                    h = read_json(bd / "history.json") or []
-                    boards.append({"board_id": bd.name, "running": True, "attempts": len(h), "has_start": (bd / "start.png").exists(),
-                                   "has_final": (bd / "final.png").exists()})
-            out.append({"id": d.name, "done": s is not None, "summary": {k: v for k, v in (s or {}).items() if k != "boards"} if isinstance(s, dict) else {},
+                hist = _pcb_hist(bd)
+                names = _pcb_names(bd, hist)
+                tries = [h for h in hist if h.get("tag") != "start"]
+                start = b.get("start") if isinstance(b.get("start"), dict) else _status((hist[0] if hist else {}).get("end_status"))
+                final = dict(b["final"]) if isinstance(b.get("final"), dict) else None
+                best = next((h for h in hist if h.get("tag") == b.get("best_tag")), None) if b.get("best_tag") else None
+                if final is not None and "unrouted" not in final:       # judge score has no counts: take them from the best attempt
+                    st = _status((best or {}).get("end_status")) or ({} if not final.get("clean_pass") else {"unrouted": 0, "drc_errors": 0})
+                    final = {**final, **{k: v for k, v in st.items() if k != "clean_pass"}}
+                plan = b.get("best_plan") if isinstance(b.get("best_plan"), dict) else None
+                provisional = False
+                if final is None and b.get("running") and hist:            # run still going: best attempt so far
+                    key = lambda h: (not (h.get("score") or {}).get("clean_pass", (h.get("end_status") or {}).get("clean", False)),
+                                     10 * ((h.get("end_status") or {}).get("unrouted") or 0) + ((h.get("end_status") or {}).get("drc_errors") or 0))
+                    best = min([h for h in hist if _status(h.get("end_status"))] or [None], key=lambda h: key(h) if h else (True, 1e9))
+                    if best:
+                        final, provisional = _status(best.get("end_status")), True
+                        b = dict(b, best_tag=best.get("tag"))
+                        plan = best.get("plan") if isinstance(best.get("plan"), dict) else None
+                boards.append({"board_id": bid, "running": bool(b.get("running")), "start": start, "final": final, "provisional": provisional,
+                               "attempts": b.get("attempts") if isinstance(b.get("attempts"), int) else len(tries),
+                               "best_tag": b.get("best_tag"), "best_plan": plan, "plan_words": pcb_plan_words(plan, names),
+                               "improved": bool(start and final and final.get("unrouted") is not None and
+                                                (final.get("unrouted", 0), final.get("drc_errors", 0)) < (start.get("unrouted", 0), start.get("drc_errors", 0))),
+                               "has_start": (bd / "start.png").exists(), "has_final": (bd / "final.png").exists()})
+            out.append({"id": d.name, "done": s is not None,
+                        "summary": {k: v for k, v in s.items() if k not in ("boards", "results") or isinstance(v, (int, float))} if isinstance(s, dict) else {},
                         "boards": boards})
     return {"runs": out}
 
 
 def pcb_board(run: str, board: str) -> dict:
     bd = PCB / run / board
-    hist = read_json(bd / "history.json") or []
-    if isinstance(hist, dict):
-        hist = hist.get("attempts") or hist.get("history") or []
+    hist = _pcb_hist(bd)
+    names = _pcb_names(bd, hist)
     for h in hist:
-        if isinstance(h, dict):
-            h["plan_words"] = pcb_plan_words(h.get("plan"))
+        h["plan_words"] = pcb_plan_words(h.get("plan"), names)
+        h.pop("saved", None)
     calls = []
     for l in read_jsonl(bd / "llm_calls.jsonl"):
         r = l.get("response")
@@ -727,9 +784,8 @@ def pcb_board(run: str, board: str) -> dict:
                 pass
         calls.append({"tag": l.get("tag"), "model": l.get("model"), "latency_s": l.get("latency_s"),
                       "diagnosis": (r.get("diagnosis") if isinstance(r, dict) else None) or l.get("diagnosis"),
-                      "plans": (r.get("plans") if isinstance(r, dict) else None) or l.get("plans"),
-                      "raw": None if isinstance(r, dict) else str(r)[:1200]})
-    return {"run": run, "board": board, "history": hist, "llm": calls,
+                      "raw": None if isinstance(r, dict) or r is None else str(r)[:1200]})
+    return {"run": run, "board": board, "history": hist, "llm": calls, "net_names": names,
             "has_start": (bd / "start.png").exists(), "has_final": (bd / "final.png").exists()}
 
 

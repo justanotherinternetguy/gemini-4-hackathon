@@ -44,13 +44,25 @@ EXPLAIN_MODEL = "gemini-4-hydrogen"
 DECISION_MODEL = "gemini-decision-1"
 MAX_REPAIRS = 4
 N_RANDOM_CHECK = 12
-METRICS = ["dc_gain_db", "ugbw", "power_dc", "fom"]
+METRICS = ["dc_gain_db", "ugbw", "power_dc", "phase_margin", "fom"]
 METRIC_POST = {
     "dc_gain_db": {"scale": 1, "decimals": 2, "unit": "dB"},
     "ugbw": {"scale": 1e-6, "decimals": 2, "unit": "MHz"},
     "power_dc": {"scale": 1e6, "decimals": 2, "unit": "uW"},
+    "phase_margin": {"scale": 1, "decimals": 1, "unit": "deg"},
     "fom": {"expr": "dc_gain_db * ugbw / power_dc", "scale": 1, "decimals": 3, "unit": ""},
 }
+PM_DEFAULT = 45.0
+# Appended by us (not by the model) before `quit`: open-loop phase margin from the same AC sweep, as
+# 180 deg minus the phase shift accumulated between 1 Hz and the unity-gain frequency.
+PM_BLOCK = """if dc_gain_db > 0
+  let ph_deg = 57.29577951 * cph(v(VOUT))
+  let ph0 = ph_deg[0]
+  meas ac ph_at_ugbw FIND ph_deg WHEN gain_db=0 CROSS=1
+  let phase_margin = 180 - abs(ph_at_ugbw - ph0)
+  print phase_margin
+end
+"""
 KINDS = {
     "common_source": "single-transistor common-source amplifier (resistor or current-source load)",
     "diff_pair_mirror_load": "differential pair with a current-mirror load (five-transistor OTA)",
@@ -180,7 +192,7 @@ def _img_block(path: Path) -> dict:
 def _fmt_metrics(m: dict | None) -> str:
     if not m:
         return "n/a"
-    units = {"dc_gain_db": "dB", "ugbw": "MHz", "power_dc": "uW", "fom": ""}
+    units = {"dc_gain_db": "dB", "ugbw": "MHz", "power_dc": "uW", "phase_margin": "deg", "fom": ""}
     return ", ".join(f"{k}={v:.4g}{(' ' + units.get(k, '')).rstrip()}" if v is not None else f"{k}=n/a"
                      for k, v in m.items())
 
@@ -209,9 +221,10 @@ UNDERSTAND_SCHEMA = {"type": "object", "properties": {
     "ugbw_mhz_min": {"type": "number", "nullable": True, "description": "minimum unity-gain bandwidth in MHz, only if stated"},
     "power_uw_max": {"type": "number", "nullable": True, "description": "maximum power in microwatts, only if stated"},
     "cload_pf": {"type": "number", "nullable": True, "description": "load capacitance in pF, only if stated"},
+    "phase_margin_deg_min": {"type": "number", "nullable": True, "description": "minimum phase margin in degrees, only if stated"},
     "other_requirements": {"type": "array", "items": {"type": "string"}}},
     "required": ["circuit_kind", "restatement", "seen_in_image", "gain_db_min", "ugbw_mhz_min", "power_uw_max",
-                 "cload_pf", "other_requirements"]}
+                 "cload_pf", "phase_margin_deg_min", "other_requirements"]}
 
 
 def understand(llm: Llm, text: str, image: Path | None) -> dict:
@@ -245,13 +258,15 @@ THE REQUEST: {text or '(no text; see the image)'}"""
     b = pick("ugbw_mhz_min", du, "minimum unity-gain bandwidth", "MHz")
     p = pick("power_uw_max", dp, "maximum power", "uW")
     cl = pick("cload_pf", dc, "load capacitance", "pF")
+    pm = pick("phase_margin_deg_min", PM_DEFAULT, "minimum phase margin", "deg")
     notes = [UNSUPPORTED_NOTE] if kind in ("source_follower", "current_mirror") else []
     return {"text": text, "image": str(image) if image else None, "circuit_kind": kind,
             "circuit_kind_description": KINDS[kind], "restatement": u.get("restatement", ""),
             "seen_in_image": u.get("seen_in_image", ""), "other_requirements": u.get("other_requirements") or [],
-            "targets": {"dc_gain_db_min": g, "ugbw_mhz_min": b, "power_uw_max": p, "cload_pf": cl},
-            "spec": f"dc_gain_db > {g:g} AND ugbw > {b:g} AND power_dc < {p:g}",
-            "spec_units": {"dc_gain_db": "dB", "ugbw": "MHz", "power_dc": "uW"},
+            "targets": {"dc_gain_db_min": g, "ugbw_mhz_min": b, "power_uw_max": p, "cload_pf": cl,
+                        "phase_margin_deg_min": pm},
+            "spec": f"dc_gain_db > {g:g} AND ugbw > {b:g} AND power_dc < {p:g} AND phase_margin > {pm:g}",
+            "spec_units": {"dc_gain_db": "dB", "ugbw": "MHz", "power_dc": "uW", "phase_margin": "deg"},
             "defaults_used": defaults_used, "notes": notes, "model": model}
 
 
@@ -300,7 +315,8 @@ must bias correctly. Then a team of agents will size it on the value grids you p
 THE REQUEST: {req['text'] or '(see image)'}
 UNDERSTOOD AS: {req['circuit_kind_description']}. {req['restatement']}
 {('THE IMAGE SHOWS: ' + req['seen_in_image']) if req.get('seen_in_image') else ''}
-SPEC THE SIZED CIRCUIT MUST MEET (typical corner): {req['spec']}   (dc_gain_db in dB, ugbw in MHz, power_dc in uW)
+SPEC THE SIZED CIRCUIT MUST MEET (typical corner): {req['spec']}   (dc_gain_db in dB, ugbw in MHz, power_dc in uW;
+phase_margin in degrees is measured by lines we append to your control block, do not add them yourself)
 Load capacitance: {t['cload_pf']:g} pF.
 
 {DEVICE_RULES}
@@ -368,6 +384,21 @@ def build_cfg(c: dict, req: dict) -> dict:
                design_notes=c.get("design_notes", ""))
     if "{ota_subckt}" not in cfg["testbench_template"]:
         raise ValueError("testbench_template does not contain the {ota_subckt} line")
+    return add_pm(cfg)
+
+
+def add_pm(cfg: dict) -> dict:
+    """Append our phase-margin measurement to the testbench (idempotent) and register the metric."""
+    tb = cfg["testbench_template"]
+    if "phase_margin" not in tb:
+        hits = [m.start() for m in re.finditer(r"(?im)^[ \t]*quit[ \t]*$", tb)]
+        if not hits:
+            raise ValueError("the control block must end with a `quit` line before .endc (copy the block verbatim)")
+        cfg["testbench_template"] = tb[:hits[-1]] + PM_BLOCK + tb[hits[-1]:]
+    cfg["metrics"] = list(METRICS)
+    cfg["metric_post"] = json.loads(json.dumps(METRIC_POST))
+    if "phase_margin" not in cfg["user_specs_metric"]:
+        cfg["user_specs_metric"] += f" AND phase_margin > {PM_DEFAULT:g}"
     return cfg
 
 
@@ -401,7 +432,7 @@ def op_dump(cfg: dict, point: dict, limit: int = 60) -> str:
         rows = []
         for l in p.stdout.splitlines():
             m = re.match(rf"^\s*([\w.#\[\]()-]+)\s*=\s*({ab._NUM})\s*$", l)
-            if m and not re.search(r"#|power_dc|dc_gain_db|vdd_current|ugbw", m.group(1)):
+            if m and not re.search(r"#|power_dc|dc_gain_db|vdd_current|ugbw|phase_margin|ph_deg|ph0", m.group(1)):
                 rows.append(f"{m.group(1)} = {float(m.group(2)):.4g}")
         return "\n".join(rows[:limit])
     except Exception as e:
@@ -437,6 +468,11 @@ def verify(cfg: dict, keep: Path, seed: int = 0) -> dict:
         return {**out, "ok": False, "stage": "bias",
                 "error": f"the circuit draws no supply current at the mid-grid point (power_dc = {power:.3g} uW): it is "
                          f"switched off. The bias point is wrong.\nDC node voltages:\n{op_dump(cfg, mid)}"}
+    if gain > 0 and r.metrics.get("ugbw") is not None and r.metrics.get("phase_margin") is None:
+        return {**out, "ok": False, "stage": "measure",
+                "error": "the gain and unity-gain frequency were measured but the phase margin was not: the control "
+                         "block must define the vector gain_db = vdb(VOUT) from an `ac` analysis and end with `quit`. "
+                         f"ngspice messages:\n{_log_excerpt(log)}"}
     if not r.ok or gain <= 0:
         return {**out, "ok": False, "stage": "bias",
                 "error": f"at the mid-grid point the DC gain is {gain:.2f} dB (it must be clearly positive, so no "
@@ -602,8 +638,8 @@ def size(cfg: dict, budget: int, seed: int, workers: int, per_worker: int, deep:
 CAVEATS = [
     "Verified at the typical process corner (tt), 27 C only: no slow/fast corners, no temperature sweep, no mismatch / Monte Carlo.",
     "Schematic-level simulation with a slimmed SKY130 model library: no layout, no parasitic extraction.",
-    "Only DC gain, unity-gain bandwidth and supply power were checked: phase margin / stability, noise, offset, "
-    "swing, slew rate and PSRR were NOT checked.",
+    "Only DC gain, unity-gain bandwidth, supply power and open-loop phase margin (from one small-signal AC sweep) "
+    "were checked: no transient / step response, and noise, offset, swing, slew rate and PSRR were NOT checked.",
     "The circuit was written by a language model and checked by simulation, not reviewed by a designer.",
     "The sizes come from a discrete value grid and a small simulation budget; they are a starting point, not a sign-off.",
 ]
@@ -653,7 +689,7 @@ plain English, no bullet points, no hype. Say what the circuit is, what the sizi
 design and why (use their own reasons), and state plainly whether the spec was met. Use only the facts below; do
 not invent numbers.
 FACTS: {json.dumps({k: ex[k] for k in ('restatement', 'spec', 'circuit_description', 'before', 'after', 'what_the_swarm_changed', 'swarm_rationales', 'swarm_last_plan', 'spec_met', 'comparison')}, default=str)[:7000]}
-Units: dc_gain_db dB, ugbw MHz, power_dc uW, widths/lengths in microns."""
+Units: dc_gain_db dB, ugbw MHz, power_dc uW, phase_margin degrees, widths/lengths in microns."""
             n, _ = llm.gen([EXPLAIN_MODEL], [{"type": "text", "text": prompt}],
                            {"type": "object", "properties": {"narrative": {"type": "string"}}, "required": ["narrative"]},
                            "low", 60, "explain")
@@ -665,18 +701,18 @@ Units: dc_gain_db dB, ugbw MHz, power_dc uW, widths/lengths in microns."""
 
 def explain_md(ex: dict) -> str:
     L = [f"# {ex['circuit_kind']}", "", f"**Request:** {ex['request']}", "", f"**Understood as:** {ex['restatement']}", "",
-         f"**Spec:** `{ex['spec']}` (dB, MHz, uW)"]
+         f"**Spec:** `{ex['spec']}` (dB, MHz, uW, degrees)"]
     if ex["defaults_used"]:
         L.append("\nDefaults filled in (not stated by the user): " + "; ".join(ex["defaults_used"]))
     L += ["", f"## Result: {'SPEC MET' if ex['spec_met'] else 'SPEC NOT MET'} (typical corner, simulation only)", ""]
     if ex.get("narrative"):
         L += [ex["narrative"], ""]
     b, a = ex.get("before") or {}, ex.get("after") or {}
-    L += ["| | DC gain (dB) | UGBW (MHz) | power (uW) | meets spec |", "|---|---|---|---|---|"]
+    L += ["| | DC gain (dB) | UGBW (MHz) | power (uW) | phase margin (deg) | meets spec |", "|---|---|---|---|---|---|"]
     for name, d in (("starting design (mid-grid)", b), ("after the swarm", a)):
         m = d.get("metrics") or {}
         g = lambda k: f"{m[k]:.4g}" if m.get(k) is not None else "n/a"
-        L.append(f"| {name} | {g('dc_gain_db')} | {g('ugbw')} | {g('power_dc')} | {'yes' if d.get('feasible') else 'no'} |")
+        L.append(f"| {name} | {g('dc_gain_db')} | {g('ugbw')} | {g('power_dc')} | {g('phase_margin')} | {'yes' if d.get('feasible') else 'no'} |")
     c = ex["comparison"]
     L += ["", "## Swarm vs random search (same simulation budget)", "",
           "| | spec met | simulations to first pass | passing designs | best design |", "|---|---|---|---|---|"]
@@ -794,6 +830,17 @@ def main() -> int:
     if a.resume and (out / "request.json").exists() and (out / "circuit.yaml").exists():
         req = json.loads((out / "request.json").read_text())
         cfg = yaml.safe_load((out / "circuit.yaml").read_text())
+        if "phase_margin" not in req["spec"]:       # runs written before the phase-margin check existed
+            req["spec"] += f" AND phase_margin > {PM_DEFAULT:g}"
+            req["defaults_used"].append(f"minimum phase margin = {PM_DEFAULT:g} deg (default, not stated)")
+            (out / "request.json").write_text(json.dumps(req, indent=1))
+        cfg["user_specs_metric"] = req["spec"]
+        cfg = add_pm(cfg)
+        ev.emit("understood", kind=req["circuit_kind"], restatement=req["restatement"], spec=req["spec"],
+                defaults_used=req["defaults_used"], model=req.get("model"), resumed=True)
+        ev.emit("circuit_written", round=0, model="(resumed from circuit.yaml)", subckt_name=cfg["subckt_name"],
+                variables=ab.variables(cfg), n_devices=len(cfg.get("roles") or []), netlist=cfg["ota_subckt_template"],
+                resumed=True)
         rounds = [json.loads(l) for l in (out / "verify_log.jsonl").read_text().splitlines() if l.strip()] \
             if (out / "verify_log.jsonl").exists() else []
         v = verify(cfg, out / "verify" / "resume")

@@ -181,6 +181,47 @@ class Session:
         return {"net": net, "name": self.names.get(net, ""), "connections_made": made,
                 "open_left": left, "attempts": tried, "log": log[:5]}
 
+    def blockers(self, margin_mm: float = 0.6, max_per_net: int = 6) -> dict:
+        """For every open connection: which OTHER nets have copper crossing the straight
+        corridor between its two endpoints? Candidates only - the Decisions API and the
+        planners judge which ones really block."""
+        e = self.eng
+        e.build_connectivity()
+        tracks = []
+        for t in e.get_tracks() or []:
+            a = _attrs(t)
+            if None in (a.get("x1_mm"), a.get("y1_mm"), a.get("x2_mm"), a.get("y2_mm")):
+                continue
+            tracks.append((a["x1_mm"], a["y1_mm"], a["x2_mm"], a["y2_mm"], a.get("net_code"), a.get("layer")))
+
+        def ccw(ax, ay, bx, by, cx, cy):
+            return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax)
+
+        def cross(p1, p2, p3, p4):
+            return (ccw(*p1, *p3, *p4) != ccw(*p2, *p3, *p4)) and (ccw(*p1, *p2, *p3) != ccw(*p1, *p2, *p4))
+
+        out = []
+        for r in e.get_ratsnest() or []:
+            a = _attrs(r)
+            n = a.get("net_code")
+            p1, p2 = (a["x1_mm"], a["y1_mm"]), (a["x2_mm"], a["y2_mm"])
+            cnt = {}
+            for (x1, y1, x2, y2, nc, lay) in tracks:
+                if nc == n or nc is None:
+                    continue
+                if cross(p1, p2, (x1, y1), (x2, y2)):
+                    d = cnt.setdefault(nc, {"crossings": 0, "layers": set()})
+                    d["crossings"] += 1
+                    d["layers"].add(lay)
+            cands = sorted(cnt.items(), key=lambda kv: -kv[1]["crossings"])[:max_per_net]
+            out.append({"net": n, "name": self.names.get(n, ""), "from": [round(p1[0], 2), round(p1[1], 2)],
+                        "to": [round(p2[0], 2), round(p2[1], 2)],
+                        "length_mm": round(math.hypot(p2[0] - p1[0], p2[1] - p1[1]), 2),
+                        "candidates": [{"net": nc, "name": self.names.get(nc, ""), "crossings": v["crossings"],
+                                        "layers": sorted(x for x in v["layers"] if x is not None)}
+                                       for nc, v in cands]})
+        return {"open_connections": out}
+
     def checkpoint(self) -> dict:
         return {"handle": int(self.eng.checkpoint())}
 
