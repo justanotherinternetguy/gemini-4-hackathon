@@ -14,14 +14,21 @@ from the run folders under `runs/pcb/`; nothing calls a model.
 
 ## Rebuild everything
 
-Run from the repository root. Steps 1 and 3 take seconds; step 2 takes minutes.
+Run from the repository root. One command does all of it and renders only the videos that are
+missing or older than their run:
+
+```bash
+pcb/site/rebuild.sh            # or: pcb/site/rebuild.sh dev_step_agent:dev_step_random hard_step_agent:hard_step_random
+```
+
+The same thing step by step. Steps 1 and 3 take seconds; step 2 takes about five minutes.
 
 ```bash
 # 1. choose the two boards (prints the ranking and the reason for each)
 .venv/bin/python -m pcb.site.pick --runs dev_step_agent:dev_step_random hard_step_agent:hard_step_random
 
-# 2. render their videos into runs/site/video/  (--fps 12 renders about 2.5x faster)
-.venv/bin/python -m pcb.site.videos --seconds 22 --fps 12
+# 2. render their videos into runs/site/video/  (--fps 30 is smoother and three times slower)
+.venv/bin/python -m pcb.site.videos --seconds 20 --fps 10
 
 # 3. build the page
 .venv/bin/python -m pcb.site.build
@@ -68,5 +75,7 @@ If a video does not start, click it once (browser autoplay rules), or start Chro
 - The page is a fixed 1920x1080 stage scaled to the window, so it looks the same on any projector.
 - `index.html` holds the before and after pictures inline; the videos are separate files in
   `runs/site/video/` and must stay next to the page.
-- `pcb/make_video.py` was changed here: it now draws up to four agents (it cut the fourth), gives
-  `power-aware` a colour, fits captions to narrow panels, and has `--fps`.
+- `pcb/make_video.py` was changed here. Fixes: it cut the fourth agent, `power-aware` had no colour,
+  the zoom box lost its aspect ratio at the board edge (panels shrank and labels overlapped the lead
+  note), captions ran into the next panel. New options: `--fps` (render fewer frames), `--seconds`
+  (target length), `--trim` (stop soon after the last board change, so the video has no dead end).

@@ -20,8 +20,12 @@ A two-tier crew working ONE shared board state per round:
   EXECUTORS      each selected action sequence runs on its OWN COPY of the current board, in its
                  own engine process, in parallel (KiCad's router draws; the rule checker reports).
   JUDGE          the child with the fewest open connections + rule errors becomes the next shared
-                 state; if no child is better, the state is kept (implicit rollback) and the
-                 orchestrators are told the round stalled. PCBWorld's scorer grades the final board.
+                 state. If no child is strictly better, a child that TIES but leaves a different set
+                 of connections open is accepted as a lateral move (a partial result to build on):
+                 the next round starts from it, where different nets are in the way. Laterals are
+                 limited in a row and never revisit a set of open nets already seen, so the search
+                 cannot circle. The best board ever seen is what gets submitted; PCBWorld's scorer
+                 grades it.
 
 Controls / ablations: --no-orchestrators (screen ranking only), --no-screen, --policy random.
 Publishes the run in the solver/viewer contract (pcb/CONTRACT.md).
@@ -96,7 +100,9 @@ def _json_call(c, model: str, blocks: list, schema: dict, thinking: str, timeout
 
 def _state_text(obs: dict, history: list[dict]) -> str:
     hist = "\n".join(f"  round {h['round']}: executed {h['executed']} -> open {h['before']}->{h['after']}"
-                     f"{' (kept)' if h['improved'] else ' (no child was better; state unchanged)'}"
+                     + (" (kept: strictly better)" if h["improved"] else
+                        " (LATERAL: same count, but different connections are open now - build on it)"
+                        if h.get("lateral") else " (no child was better; state unchanged)")
                      for h in history[-6:]) or "  (first round)"
     return (f"CURRENT BOARD: {obs['open']} open connection(s), {obs['errors_not_open']} other rule error(s).\n"
             "OPEN CONNECTIONS and the nets whose copper crosses the straight path between their ends "
@@ -253,6 +259,12 @@ def council_board(board_id: str, start: Path, a) -> dict:
     live.event("note", agent="router", text=f"classic router left {obs['open']} open connection(s)")
     image = out_dir / "start.png"
     history, guidance, executed_total = [], "", 0
+
+    def signature(o: dict) -> tuple:
+        return tuple(sorted(n for n, _ in o["open_nets"])) + (o["errors_not_open"],)
+
+    visited = {signature(obs)}
+    best_state, best_health, laterals = state, health(obs), 0
     t0 = time.time()
     for rnd in range(1, a.rounds + 1):
         if obs["clean"] or time.time() - t0 > a.wall:
@@ -343,9 +355,20 @@ def council_board(board_id: str, start: Path, a) -> dict:
             if k.get("ok") and tuple(k["health"]) < tuple(best_h):
                 best_i, best_h = i, k["health"]
         before = obs["open"]
+        lateral = False
+        if best_i is None and laterals < a.max_lateral:
+            # keep a tie that leaves DIFFERENT connections open: a partial result to build on
+            for i, k in enumerate(kids):
+                if k.get("ok") and tuple(k["health"]) == tuple(cur) and signature(k["obs"]) not in visited:
+                    best_i, lateral = i, True
+                    break
         if best_i is not None:
             state = Path(kids[best_i]["saved"])
             obs = kids[best_i]["obs"]
+            visited.add(signature(obs))
+            laterals = laterals + 1 if lateral else 0
+            if tuple(health(obs)) < tuple(best_health):
+                best_state, best_health = state, health(obs)
             live.publish(state, selected[best_i].get("credit", "agent").split("~")[0].split("+")[0])
             try:      # fresh picture for the reviewer next round
                 e2 = Engine()
@@ -356,17 +379,21 @@ def council_board(board_id: str, start: Path, a) -> dict:
             except Exception:
                 pass
         history.append({"round": rnd, "executed": [s["steps"] for s in selected], "before": before,
-                        "after": obs["open"], "improved": best_i is not None,
+                        "after": obs["open"], "improved": best_i is not None and not lateral, "lateral": lateral,
+                        "open_nets_now": [nm for _, nm in obs["open_nets"]][:12],
                         "winner": selected[best_i].get("credit") if best_i is not None else None})
         with open(log, "a") as fh:
             fh.write(json.dumps({"role": "judge", "round": rnd, "children": [
                 {"credit": selected[i].get("credit"), "ok": k.get("ok"), "health": k.get("health"),
                  "log": k.get("log")} for i, k in enumerate(kids)], "winner": best_i, "open_now": obs["open"]}) + "\n")
         print(f"  [{board_id[:24]}] round {rnd}: {len(proposals)} proposals -> {len(selected)} executed -> "
-              f"open {before}->{obs['open']} {'(kept)' if best_i is not None else '(stalled)'}", flush=True)
+              f"open {before}->{obs['open']} "
+              f"{'(lateral: different connections open)' if lateral else '(kept)' if best_i is not None else '(stalled)'}",
+              flush=True)
     # final scoring by PCBWorld's scorer on the saved state
     final = OUT / a.run_id / "submitted" / f"{board_id}.kicad_pcb"
     final.parent.mkdir(parents=True, exist_ok=True)
+    state = best_state          # a lateral move is never submitted over a strictly better board
     shutil.copy(state, final)
     pro = Path(state).with_suffix(".kicad_pro")
     if pro.exists():
@@ -384,7 +411,8 @@ def council_board(board_id: str, start: Path, a) -> dict:
                                          "clean_pass": base.get("clean_pass")},
             "final": score, "rounds": len(history), "attempts": executed_total,
             "open_by_round": [st["unrouted"]] + [h["after"] for h in history],
-            "winners": [h.get("winner") for h in history], "best_tag": "council", "best_agent": "council",
+            "winners": [h.get("winner") for h in history], "laterals": sum(bool(h.get("lateral")) for h in history),
+            "best_tag": "council", "best_agent": "council",
             "best_plan": {"name": "proposer + orchestrator council"}, "submitted": str(final)}
 
 
@@ -396,6 +424,8 @@ def main() -> None:
     ap.add_argument("--keep", type=int, default=3, help="action sequences executed per round")
     ap.add_argument("--rounds", type=int, default=8)
     ap.add_argument("--wall", type=float, default=900, help="per-board wall-clock limit (s)")
+    ap.add_argument("--max-lateral", type=int, default=3,
+                    help="tied moves accepted in a row before the board must strictly improve")
     ap.add_argument("--policy", default="agent", choices=["agent", "random"])
     ap.add_argument("--no-orchestrators", action="store_true", help="ablation: screen ranking only")
     ap.add_argument("--no-screen", action="store_true", help="ablation: no Decisions-API screen")

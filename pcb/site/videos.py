@@ -31,24 +31,33 @@ def render(x: dict, seconds: float, fps: int = 30) -> str:
     ctl = RUNS / x["random_run"] / "live" / x["board"]
     has_ctl = ctl.is_dir() and any(ctl.glob("0000__*.kicad_pcb"))
     length = max(span(run), span(ctl) if has_ctl else 0.0, 10.0)
-    speed = max(1.0, round(length / seconds, 1))
     out = OUT / f"{x['board']}.mp4"
-    cmd = [sys.executable, "-m", "pcb.make_video", "--run", str(run), "--out", str(out), "--speed", str(speed),
+    cmd = [sys.executable, "-m", "pcb.make_video", "--run", str(run), "--out", str(out), "--seconds", str(seconds),
+           "--trim", str(round(max(8.0, 0.08 * length), 1)),
            "--poster", "--fps", str(fps), "--title", f"{short(x['board'])}: Gemini 4 step agents vs a random policy"]
     if has_ctl:
         cmd += ["--control", str(ctl)]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-    return f"{x['board']}: speed x{speed} -> {out}\n{(r.stdout + r.stderr).strip()[-600:]}"
+    return f"{x['board']} -> {out}\n{(r.stdout + r.stderr).strip()[-600:]}"
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seconds", type=float, default=24.0, help="target length of each video")
     ap.add_argument("--fps", type=int, default=30, help="frames rendered per second; 10-15 renders 2-3x faster")
+    ap.add_argument("--missing", action="store_true", help="skip boards whose video is newer than their run")
     ap.add_argument("--boards", nargs="*", help="only these boards (default: the featured ones)")
     a = ap.parse_args()
     pick = json.loads((ROOT / "runs" / "site" / "pick.json").read_text())
     todo = [x for x in pick["ranking"] if x["board"] in a.boards] if a.boards else pick["featured"]
+    if a.missing:
+        def fresh(x):
+            out, ev = OUT / f"{x['board']}.mp4", RUNS / x["agent_run"] / "live" / x["board"] / "events.jsonl"
+            return out.is_file() and (not ev.is_file() or out.stat().st_mtime > ev.stat().st_mtime)
+        todo = [x for x in todo if not fresh(x)]
+        if not todo:
+            print("videos are up to date")
+            return
     OUT.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(len(todo) or 1) as ex:
         for msg in ex.map(lambda x: render(x, a.seconds, a.fps), todo):

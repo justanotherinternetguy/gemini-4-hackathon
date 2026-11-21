@@ -88,7 +88,7 @@ def zoom_box(run: dict, margin: float = 9.0, aspect: float = 1.0) -> tuple:
     else:
         cy = (y0 + y1) / 2
         y0, y1 = cy - w / aspect / 2, cy + w / aspect / 2
-    return (max(bx[0], x0), max(bx[1], y0), min(bx[2], x1), min(bx[3], y1))
+    return (x0, y0, x1, y1)
 
 
 def clip(segs, box):
@@ -103,7 +103,7 @@ class Panel:
     def __init__(self, fig, rect, run, agent, box, label, color):
         self.run, self.agent, self.box, self.color = run, agent, box, color
         self.narrow = rect[2] < 0.2            # five panels across: smaller labels, shorter captions
-        self.wrap = max(24, int(rect[2] * 1920 / 7.7))
+        self.wrap = max(24, int(rect[2] * 1920 / 9.4))
         self.ax = fig.add_axes(rect)
         ax = self.ax
         ax.set_facecolor(PANEL)
@@ -151,7 +151,7 @@ class Panel:
         self.action = ax.text(0.02, 0.97, "", transform=ax.transAxes, color=INK, fontsize=12.5, va="top",
                               family="monospace", bbox=dict(boxstyle="round,pad=0.35", fc=BG, ec=color, lw=1.2,
                                                             alpha=0.92), zorder=10)
-        self.thought = ax.text(0.0, -0.025, "", transform=ax.transAxes, color=INK2, fontsize=12, va="top",
+        self.thought = ax.text(0.0, -0.02, "", transform=ax.transAxes, color=INK2, fontsize=13, va="top",
                                linespacing=1.35, wrap=False)
         self.cur = None
         self.prev_keys: set = set()
@@ -194,7 +194,7 @@ class Panel:
         txt = ev.get("text", "")
         act, _, why = txt.partition(" - ")
         self.action.set_text(act.strip()[: min(46, self.wrap - 6)])
-        self.thought.set_text("\n".join(textwrap.wrap(why.strip().replace("**", ""), self.wrap)[:5 if self.narrow else 4]))
+        self.thought.set_text("\n".join(textwrap.wrap(why.strip().replace("**", ""), self.wrap)[:5]))
 
 
 def render(args) -> None:
@@ -212,19 +212,17 @@ def render(args) -> None:
     cols = agents + (["random"] if control else [])
     n = len(cols)
     fig = plt.figure(figsize=(19.2, 10.8), dpi=100, facecolor=BG)
-    gap, left, top_h = 0.02, 0.035, 0.53
+    gap, left, top_h = 0.02, 0.035, 0.47
     pw = (1 - 2 * left - gap * (n - 1)) / n
-    ph = pw * 1920 / 1080 * 1.0
-    if ph > top_h:
-        ph = top_h
-        pw = ph * 1080 / 1920
+    ph = min(top_h, pw * 1920 / 1080 * 1.6)   # panels fill the band between the header and the captions
     aspect = (pw * 1920) / (ph * 1080)
     box = zoom_box(run, aspect=aspect)
-    y0 = 0.86 - ph
+    y0 = 0.835 - ph
     panels = {}
     for i, a in enumerate(cols):
         src = control if a == "random" else run
-        label = ("random (control)" if n >= 5 else "random policy (control)") if a == "random" else f"Hydrogen · {a}"
+        label = ("random (control)" if n >= 5 else "random policy (control)") if a == "random" else (
+            a if n >= 5 else f"Hydrogen · {a}")
         panels[a] = Panel(fig, [left + i * (pw + gap), y0, pw, ph], src, a, box,
                           label, AGENT_COLORS.get(a, INK))
         panels[a].set_version(src["versions"][0], -99)
@@ -233,14 +231,14 @@ def render(args) -> None:
     board = Path(args.run).name
     fig.text(left, 0.955, args.title or "Gemini 4 agents repair what the classic router left open",
              color=INK, fontsize=26, fontweight="bold", va="center")
-    fig.text(left, 0.915, f"PCBWorld board {board}  ·  zoomed on the open connections  ·  "
-             "red = top copper, blue = bottom copper, dashed yellow = still open", color=INK2, fontsize=14,
+    fig.text(left, 0.915, f"{board}  ·  one panel per Gemini 4 Hydrogen agent, each on its own copy of the board  ·  "
+             "red = top copper, blue = bottom, dashed yellow = still open", color=INK2, fontsize=14,
              va="center")
     lead = fig.text(left, 0.885 - 0.0, "", color=AGENT_COLORS["carbon"], fontsize=13, va="center", style="italic")
     clock = fig.text(1 - left, 0.955, "", color=INK2, fontsize=16, ha="right", va="center", family="monospace")
 
     # chart: open connections over run time, per agent (+ control best)
-    cax = fig.add_axes([left + 0.02, 0.07, 1 - 2 * left - 0.04, 0.17])
+    cax = fig.add_axes([left + 0.02, 0.07, 1 - 2 * left - 0.04, 0.14])
     cax.set_facecolor(BG)
     for s in ("top", "right"):
         cax.spines[s].set_visible(False)
@@ -249,6 +247,16 @@ def render(args) -> None:
     cax.tick_params(colors=INK2, labelsize=11)
     end_t = max(run["end_t"], control["end_t"] if control else 0)
     t_start = run["versions"][0]["t"]
+    if args.trim is not None:                 # stop soon after the last board change (no dead time at the end)
+        last = max(v["t"] for v in run["versions"])
+        if control:
+            best_n = len(control["versions"][0]["open"])
+            for v in control["versions"][1:]:
+                if len(v["open"]) < best_n:
+                    best_n, last = len(v["open"]), max(last, v["t"])
+        end_t = min(end_t, last + args.trim)
+    if args.seconds:
+        args.speed = max(1.0, round((end_t - t_start) / args.seconds, 1))
     start_open = len(run["versions"][0]["open"])
     cax.set_xlim(0, end_t - t_start)
     cax.set_ylim(-0.3, start_open + 0.6)
@@ -348,6 +356,8 @@ def main() -> None:
     ap.add_argument("--control", help="live folder of a control run on the same board (random policy)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--speed", type=float, default=6.0, help="run seconds per video second")
+    ap.add_argument("--seconds", type=float, help="target length of the run part of the video; overrides --speed")
+    ap.add_argument("--trim", type=float, help="end this many run seconds after the last board change")
     ap.add_argument("--title")
     ap.add_argument("--fps", type=int, default=30, help="frames rendered per video second (lower = faster render)")
     ap.add_argument("--poster", action="store_true", help="also save the last frame as a PNG")

@@ -250,9 +250,10 @@ def feed_items(ag: dict) -> str:
     return "".join(items)
 
 
-def result_line(side: dict) -> str:
+def result_line(side: dict, steps: bool = False) -> str:
     if side["best_clean"]:
-        return f'{side["start_open"]} open → 0 · clean pass'
+        n = min([x["n_steps"] for x in side["agents"] if x["clean"]], default=None)
+        return f'{side["start_open"]} open → 0 · clean' + (f" in {n} steps" if steps and n else " pass")
     return f'{side["start_open"]} open → {side["best_open"]} open'
 
 
@@ -424,8 +425,10 @@ def slide_limits(rows: list[dict], tc: dict) -> str:
         ba = next((x for x in worst["agent"]["agents"] if x["agent"] == worst["agent"]["best_agent"]), None) \
             or min(worst["agent"]["agents"], key=lambda x: x["open"], default=None)
         if ba and ba["steps"]:
-            li.append(f'<b>Why, in an agent\'s own words</b> ({E(short(worst["board"]))}, {E(ba["agent"])}, last step): '
-                      f'<q>{E(ba["steps"][-1]["thought"])}</q>')
+            tail = ba["steps"][-6:]
+            said = next((x for x in reversed(tail) if "fail" in (x.get("thought") or "").lower()), tail[-1])
+            li.append(f'<b>Why, in an agent\'s own words</b> ({E(short(worst["board"]))}, {E(ba["agent"])}, '
+                      f'step {ba["steps"].index(said) + 1} of {len(ba["steps"])}): <q>{E(said["thought"])}</q>')
     if tc["random_also"]:
         li.append("<b>The random control also reached a clean pass on</b> " + E(", ".join(short(b) for b in tc["random_also"]))
                   + ". On that board the step loop and KiCad's router are enough; the agents needed fewer steps ("
@@ -478,8 +481,8 @@ def cards(rows: list[dict], tc: dict, feat: list[dict]) -> list[str]:
     lines = []
     for r in feat:
         a, c = r["agent"], r["random"]
-        lines.append(f'<div class="rl"><b>{E(short(r["board"]))}</b><span class="{"okc" if a["best_clean"] else ""}">agents: {E(result_line(a))}</span>'
-                     f'<span class="rc">random: {E(result_line(c)) if c else "not finished"}</span></div>')
+        lines.append(f'<div class="rl"><b>{E(short(r["board"]))}</b><span class="{"okc" if a["best_clean"] else ""}">agents: {E(result_line(a, True))}</span>'
+                     f'<span class="rc">random: {E(result_line(c, True)) if c else "not finished"}</span></div>')
     result = f"""
 <section class="slide card" data-title="result">
   <div class="kicker">Result · scored by PCBWorld's evaluate_one · single run</div>
