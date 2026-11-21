@@ -199,12 +199,12 @@ class Session:
     def score(self, path: str, project: str | None = None) -> dict:
         """PCBWorld's own post-hoc scorer on a SAVED board (fresh engine, like stage 2)."""
         from eval.metrics import evaluate_one
+        self.close()            # one live router per process: release ours before the scorer builds its own
         r = evaluate_one(path, project or (os.path.splitext(path)[0] + ".kicad_pro"))
         keep = ("clean_pass", "success", "routability", "drv_errors_only_count", "total_drv_count",
-                "wirelength_mm", "total_wirelength", "via_count", "potential_gain", "final_potential",
-                "track_angle_count", "unrouted_count")
+                "wirelength_mm", "total_wirelength", "wirelength", "via_count", "vias", "potential_gain",
+                "final_potential", "track_angle_count", "unrouted_count", "drv_errors_only_by_type")
         out = {k: r[k] for k in keep if k in r}
-        out["_keys"] = sorted(r.keys())[:80]
         if "drv_errors_only" in r:
             out["drv_errors_only_count"] = len(r["drv_errors_only"])
         return out

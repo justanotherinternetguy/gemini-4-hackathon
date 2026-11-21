@@ -54,8 +54,10 @@ def violations(cons, metrics) -> list[float]:
 
 class AmsSwarm:
     def __init__(self, circuit: str, seed: int, budget: int, workers: int, per_worker: int, deep: bool):
-        self.name, self.seed, self.budget = circuit, seed, budget
-        self.cfg = ab.load(circuit)
+        # `circuit` is a benchmark name, or an already-loaded config dict (used by create/analog.py)
+        self.cfg = circuit if isinstance(circuit, dict) else ab.load(circuit)
+        self.name = circuit if isinstance(circuit, str) else "create_" + str(self.cfg.get("subckt_name", "custom"))
+        self.seed, self.budget = seed, budget
         self.cons = ab.parse_specs(self.cfg["user_specs_metric"])
         self.vars = ab.variables(self.cfg)
         self.grids = {v: ab.grid(self.cfg, v) for v in self.vars}

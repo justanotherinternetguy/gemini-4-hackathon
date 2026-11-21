@@ -315,6 +315,13 @@ def repair_board(board_id: str, start: Path, a) -> dict:
     pro_src = Path(best["saved"]).with_suffix(".kicad_pro")
     if pro_src.exists():
         shutil.copy(pro_src, final.with_suffix(".kicad_pro"))
+    try:   # picture of the submitted board for the stage
+        e2 = Engine()
+        e2.call("open", board=str(final), project=str(f["pro"]))
+        e2.call("render", path=str(out_dir / "final.png"))
+        e2.close()
+    except Exception as e:
+        print(f"  [{board_id}] final render failed: {str(e)[:100]}", flush=True)
     result.update(attempts=attempts, best_tag=best["tag"], best_plan=best["plan"],
                   final=best.get("score"), submitted=str(final))
     (out_dir / "history.json").write_text(json.dumps(history, indent=1, default=str))

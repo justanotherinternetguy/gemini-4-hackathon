@@ -42,9 +42,10 @@ function go(n) {
 document.querySelectorAll("#nav button").forEach((b) => (b.onclick = () => go(+b.dataset.step)));
 document.addEventListener("keydown", (e) => {
   const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
+  if (document.body.classList.contains("drawer-open") || e.target.closest?.("[data-cand],[data-part],[data-lay],[data-att],.term")) return;   // explain.js owns the keys
   if (typing) { if (e.key === "Enter" && document.activeElement.id === "specText") $("btnSpecText").click(); if (e.key === "Escape") document.activeElement.blur(); return; }
-  if (e.key >= "1" && e.key <= "6") return go(+e.key);
-  if (e.key === "ArrowRight") return go(Math.min(6, S.step + 1));
+  if (e.key >= "1" && e.key <= "7") return go(+e.key);
+  if (e.key === "ArrowRight") return go(Math.min(7, S.step + 1));
   if (e.key === "ArrowLeft") return go(Math.max(1, S.step - 1));
   if (e.key === "Enter") {
     e.preventDefault();
@@ -105,11 +106,12 @@ function renderRoles(res) {
   for (const r of roles) {
     const [col, name, what] = ROLE[r] || ["#777", r, ""];
     const g = el("div", "rolegroup");
-    g.append(el("div", "rolename", `<i style="background:${col}"></i><span>${esc(name)}<small>${esc(what)}</small></span>`));
+    const rn = el("div", "rolename", `<i style="background:${col}"></i><span>${esc(name)}<small>${esc(what)}</small></span>`);
+    rn.dataset.part = r; rn.tabIndex = 0; rn.title = "click: what this part does, its knobs, and why the crew changed it"; g.append(rn);
     const chips = el("div", "chips");
     for (const d of devs.filter((x) => x.role === r)) {
       const c = el("div", "chip" + (d.correct === false ? " wrong" : ""));
-      c.style.borderColor = col; c.style.animationDelay = (i++ * 70) + "ms";
+      c.style.borderColor = col; c.style.animationDelay = (i++ * 70) + "ms"; c.dataset.part = r; c.tabIndex = 0;
       if (d.correct === false) c.dataset.truth = (ROLE[d.truth] || [0, d.truth])[1];
       const conf = d.confidence != null ? Math.round(d.confidence * 100) : null;
       c.innerHTML = `<b>${esc(d.label || d.inst)}</b>` + (conf != null ? `<span class="conf">${conf}%</span><div class="bar"><i style="width:${conf}%;background:${col}"></i></div>` : "");
@@ -117,7 +119,7 @@ function renderRoles(res) {
     }
     g.append(chips); G.append(g);
   }
-  if (res.knobs?.length) $("knobs").innerHTML = `<b>${res.knobs.length} tuning knobs</b> follow from those roles: ` + res.knobs.map((k) => `<code>${esc(k)}</code>`).join("");
+  if (res.knobs?.length) $("knobs").innerHTML = `<b>${res.knobs.length} tuning knobs</b> follow from those roles (click a transistor to explore it): ` + res.knobs.map((k) => `<code>${esc(k)}</code>`).join("");
   if (res.circuit && ["diff", "fc", "tele"].includes(res.circuit)) $("selCircuit").value = res.circuit;
 }
 

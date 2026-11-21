@@ -451,9 +451,47 @@ class H(BaseHTTPRequestHandler):
                 if not SAFE_ID.match(name) or ".." in name:
                     return self.send_json({"error": "bad name"}, 400)
                 return self.send_json({"comparison": read_json(RUNS / "signoff" / name / "comparison.json")})
+            if u.path == "/api/explain":
+                from demo import explain
+                run = q.get("run", "")
+                if run and (not SAFE_ID.match(run) or ".." in run):
+                    return self.send_json({"error": "bad run id"}, 400)
+                upto = int(q["upto"]) if q.get("upto", "").isdigit() and int(q["upto"]) > 0 else None
+                if q.get("n", "").isdigit():
+                    return self.send_json(explain.candidate(run, int(q["n"])))
+                if q.get("part"):
+                    if q["part"] not in explain.PARTS:
+                        return self.send_json({"error": "unknown part"}, 400)
+                    circ = q.get("circuit") if q.get("circuit") in ("diff", "fc", "tele") else None
+                    return self.send_json(explain.part(run, q["part"], upto, circ))
+                return self.send_json(explain.overview(run, upto) if run else {"error": "no run"})
+            if u.path == "/api/schematic":
+                from demo import explain
+                name = explain.SCHEMATIC.get(q.get("circuit", ""))
+                if not name:
+                    return self.send_json({"error": "unknown circuit"}, 400)
+                return self.send_file(ROOT / "third_party" / "AMPICBench" / "schematics" / name)
+            if u.path == "/api/pcb":
+                from demo import explain
+                return self.send_json(explain.pcb_runs())
+            if u.path in ("/api/pcb_board", "/api/pcbfile"):
+                from demo import explain
+                run, board, name = q.get("run", ""), q.get("board", ""), q.get("name", "")
+                if not SAFE_ID.match(run) or not SAFE_ID.match(board) or ".." in run or ".." in board:
+                    return self.send_json({"error": "bad name"}, 400)
+                if u.path == "/api/pcb_board":
+                    return self.send_json(explain.pcb_board(run, board))
+                if not SAFE_PNG.match(name) or ".." in name:
+                    return self.send_json({"error": "bad name"}, 400)
+                return self.send_file(explain.PCB / run / board / name)
             return self.send_json({"error": "not found"}, 404)
         except (BrokenPipeError, ConnectionResetError):
             pass
+        except Exception as e:  # noqa: BLE001
+            try:
+                self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+            except OSError:
+                pass
 
     def events(self, q):
         run = q.get("run", "")
@@ -638,6 +676,24 @@ class H(BaseHTTPRequestHandler):
                 res["session"] = sd.name
                 res["target"] = guarded(res.get("spec") or DEFAULT_SPEC)
                 return self.send_json(res)
+            if u.path in ("/api/ask", "/api/change"):
+                import base64
+                from demo import explain
+                body = json.loads(self.body() or b"{}")
+                run = str(body.get("run") or "")
+                if run and (not SAFE_ID.match(run) or ".." in run):
+                    return self.send_json({"error": "bad run id"}, 400)
+                audio = base64.b64decode(body["audio"]) if body.get("audio") else None
+                mime = str(body.get("mime") or "audio/webm")
+                text = str(body.get("question") or body.get("text") or "").strip()[:2000]
+                if not audio and not text:
+                    return self.send_json({"error": "ask a question (type it or hold to talk)"}, 400)
+                if u.path == "/api/ask":
+                    if not run or not (SWARM / run / "history.jsonl").exists():
+                        return self.send_json({"error": "no crew run to ask about yet: start or replay a run first"}, 400)
+                    return self.send_json(explain.ask(run, text, audio, mime))
+                spec = body.get("spec") if isinstance(body.get("spec"), dict) else None
+                return self.send_json(explain.change(run if run and (SWARM / run / "history.jsonl").exists() else "", text, audio, mime, spec))
             if u.path == "/api/run":
                 body = json.loads(self.body() or b"{}")
                 circuit = body.get("circuit") if body.get("circuit") in ("diff", "fc", "tele") else "diff"
@@ -659,10 +715,20 @@ class H(BaseHTTPRequestHandler):
                     sp = LIVE / f"{run_id}_spec.json"
                     sp.write_text(json.dumps(spec))
                     cmd += ["--spec", str(sp)]
+                sfrom, started_from = str(body.get("start_from_run") or ""), None
+                if sfrom and SAFE_ID.match(sfrom) and ".." not in sfrom:      # change request: warm-start from that run's best design
+                    sj = SWARM / sfrom / "summary.json"
+                    try:
+                        ok = "--start-from" in (ROOT / "sizing" / "swarm.py").read_text()
+                    except OSError:
+                        ok = False
+                    if ok and (read_json(sj) or {}).get("best_params") and rf is None:
+                        cmd += ["--start-from", str(sj)]
+                        started_from = sfrom
                 logf = (LIVE / f"{run_id}.log").open("wb")
                 with LOCK:
                     PROCS[run_id] = subprocess.Popen(cmd, cwd=ROOT, stdout=logf, stderr=subprocess.STDOUT)
-                return self.send_json({"run_id": run_id, "cmd": " ".join(cmd[1:])})
+                return self.send_json({"run_id": run_id, "cmd": " ".join(cmd[1:]), "started_from": started_from})
             if u.path == "/api/layout":
                 body = json.loads(self.body() or b"{}")
                 run = body.get("run", "")

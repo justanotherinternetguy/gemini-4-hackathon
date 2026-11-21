@@ -16,6 +16,9 @@
     <button data-step="4"><kbd>4</kbd> Lay it out</button>
     <button data-step="5"><kbd>5</kbd> Verify</button>
     <button data-step="6"><kbd>6</kbd> Proof</button>
+    <button data-step="7"><kbd>7</kbd> Boards</button>
+    <button id="btnAsk" class="ask" title="ask a question or request a change (A)"><kbd>A</kbd> Ask the crew</button>
+    <button id="btnGloss" title="glossary and legend (G)"><kbd>G</kbd> Glossary</button>
   </nav>
 </header>
 
@@ -89,7 +92,7 @@
     <div class="col left">
       <div class="agent architect" id="architect">
         <div class="ahead"><span class="avatar a-arch">C</span><div><b>Architect</b><small>Gemini 4 Carbon &middot; diagnoses, hands out directions</small></div><span id="archState" class="state"></span></div>
-        <div id="archBubble" class="bubble big-bubble muted">Waiting for the first simulation&hellip;</div>
+        <div id="archBubble" class="bubble big-bubble muted" title="click for the full plan and every worker's instructions">Waiting for the first simulation&hellip;</div>
         <div id="archBinding" class="binding"></div>
       </div>
       <div class="agent critic" id="critic">
@@ -103,16 +106,17 @@
     <div class="col mid">
       <div class="agent judge">
         <div class="ahead"><span class="avatar a-judge">J</span><div><b>The Judge</b><small>ngspice simulator &middot; 5 process corners &times; 3 temperatures &middot; no opinions</small></div><span id="judgeState" class="state"></span></div>
-        <div class="judgebody">
+        <div class="judgebody" id="judgeBody" title="click: the full story of the best design">
           <div class="counter"><span id="nPass">0</span><span class="of">/ 15</span><div class="counterlabel">corners pass<br><small id="bestLabel">best design so far</small></div></div>
           <div class="grid" id="grid"></div>
         </div>
-        <div class="currentbar">
+        <div class="currentbar" id="currentBar">
           <div class="cblabel"><span>Power: worst-case core current</span><b id="curVal">&ndash;</b></div>
           <div class="track"><div id="curFill" class="fill"></div><div id="curLimit" class="limit"><span id="curLimitLabel">limit</span></div></div>
         </div>
         <div class="metrics" id="metrics"></div>
-        <div class="dotswrap"><div class="small">every design tried (colour = which worker, filled = passes all 15)</div><div id="dots" class="dots"></div></div>
+        <div id="partsStrip" class="partsstrip"></div>
+        <div class="dotswrap"><div class="small"><b>click any dot</b>: who proposed it, why, what the Judge said (colour = which worker, filled = passes all 15)</div><div id="dots" class="dots"></div></div>
       </div>
     </div>
     <div class="col right">
@@ -148,6 +152,7 @@
         <div class="arrow">&rarr;</div>
         <figure><figcaption id="layBestCap">After: the crew's best so far</figcaption><div class="imgbox"><img id="layBest" alt="" hidden><span class="ph">no floorplan yet</span></div></figure>
       </div>
+      <div id="layParts" class="partsstrip"></div>
       <div class="caption"><b>Layout planning:</b> how many fingers each transistor is split into, how matched pairs are interleaved (ABBA cancels manufacturing gradients), and where each group sits. <b class="caveat">Estimated parasitics &mdash; not routed, no DRC/LVS.</b></div>
     </div>
     <div class="col">
@@ -157,7 +162,7 @@
       </div>
       <div class="workershead"><b>Layout workers</b> <small>Gemini 4 Hydrogen &middot; each proposes a floorplan; the Judge re-simulates it with estimated parasitics</small></div>
       <div id="layWorkers" class="workers"></div>
-      <div class="dotswrap"><div class="small">every floorplan tried (filled = still passes all 15 corners)</div><div id="layDots" class="dots"></div></div>
+      <div class="dotswrap"><div class="small"><b>click any dot</b>: its plan and the Judge's result (filled = still passes all 15 corners)</div><div id="layDots" class="dots"></div></div>
     </div>
   </div>
 </section>
@@ -193,7 +198,25 @@
   </div>
 </section>
 
+<!-- ============================== STEP 7: PCB boards -->
+<section id="step7" class="step">
+  <div class="stagebar">
+    <h2>7 &middot; Boards <small>the same crew-and-judge loop, repairing circuit boards the autorouter could not finish</small></h2>
+    <span class="spacer"></span>
+    <span id="pcbInfo" class="runinfo">no run yet</span>
+    <select id="selPcb"></select>
+    <button id="btnPcbReload">Reload</button>
+  </div>
+  <div id="boards" class="boards"></div>
+</section>
+
+<aside id="drawer" class="drawer" hidden aria-label="details">
+  <div class="drawerhead"><h3 id="drawerTitle"></h3><button id="drawerClose" title="close (Esc)">close <kbd>Esc</kbd></button></div>
+  <div id="drawerBody" class="drawerbody"></div>
+</aside>
+<div id="tip" class="tip" hidden></div>
 <div id="toast" class="toast" hidden></div>
 <script src="/static/app.js"></script>
+<script src="/static/explain.js"></script>
 </body>
 </html>

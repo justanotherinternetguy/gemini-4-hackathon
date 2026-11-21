@@ -352,7 +352,9 @@ class Entry:
 
 class Swarm:
     def __init__(self, workers=4, per_worker=2, candidates=40, spec=None, dry=False, seed=0,
-                 stall_rounds=2, run_id=None, replan_every=2, fast_start=False, critic=False):
+                 stall_rounds=2, run_id=None, replan_every=2, fast_start=False, critic=False,
+                 start_params=None):
+        self.start_params = start_params
         self.replan_every, self.fast_start, self.use_critic = replan_every, fast_start, critic
         self.critic_note, self._critic_pending = "", None
         self._t0 = time.time()
@@ -654,7 +656,9 @@ Give each a one-sentence rationale."""
     # ---- main loop
     def run(self) -> dict:
         t0 = time.perf_counter()
-        start = self._evaluate(dict(oa.DEFAULTS), 0, "start", "published AMPICBench sizing")
+        start = self._evaluate(dict(self.start_params or oa.DEFAULTS), 0, "start",
+                               "starting design supplied by the user" if self.start_params
+                               else "published AMPICBench sizing")
         print(f"[start] {eval_text(start.er, 3)}")
         it, last_best, stall = 0, score(start.er), 0
         self.emit("start", circuit=oa.CIRCUIT, spec={k: list(v) for k, v in self.spec.items()},
@@ -755,6 +759,8 @@ def main() -> None:
     ap.add_argument("--critic", action="store_true", help="Neon reviews the Bode plot image of the best design each round")
     ap.add_argument("--roles", type=Path, help="roles.json from `sizing.intake roles` (photo -> roles): "
                     "the predicted role map defines the knobs")
+    ap.add_argument("--start-from", type=Path, help="design JSON (a dict of knobs, or {params: …} / "
+                    "a run's summary.json with best_params) to start from instead of the published sizing")
     ap.add_argument("--spec", type=Path, help='JSON spec, e.g. {"pm_deg": [">=", 60], "ugf_hz": [">=", 1e7], ...}')
     a = ap.parse_args()
     oa.use(a.circuit)
@@ -765,6 +771,11 @@ def main() -> None:
                 if d["role"] != "other" and d.get("confidence", 1.0) >= 0.5}
         CARDS["live"] = CARDS[base]
         oa.use(oa.register_from_roles(base, rmap, "live"))
+    start_params = None
+    if a.start_from:
+        dj = json.loads(a.start_from.read_text())
+        dj = dj.get("best_params") or dj.get("params") or dj
+        start_params = {k: float(v) for k, v in dj.items() if k in oa.SPACE}
     spec = None
     if a.spec:
         sj = json.loads(a.spec.read_text())
@@ -778,6 +789,7 @@ def main() -> None:
                 os.environ["GEMINI_API_KEY"] = line.split("=", 1)[1].strip()
     s = Swarm(a.workers, a.per_worker, a.candidates, spec=spec, dry=a.dry, stall_rounds=a.stall_rounds,
               replan_every=a.replan_every, fast_start=a.fast_start, critic=a.critic,
+              start_params=start_params,
               run_id=a.run_id)
     out = s.run()
     if out:
