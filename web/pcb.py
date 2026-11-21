@@ -63,7 +63,7 @@ def ranking(t: dict) -> str:
                     f'<div class="sqs">{sq([(None, "base")] * n)}</div><div class="n">{n}<small>/10</small></div></div>')
     order = [(b, "base") for b in HARD if b in t["start"]] + [(b, "script") for b in HARD if b in t["scripted"]] + \
             [(b, "agent") for b in HARD if b in t["agents"]]
-    rows.append(f'<div class="rrow ours"><div class="who"><b>Tapeout Crew</b><span>router + repair + Gemini 4 agents</span></div>'
+    rows.append(f'<div class="rrow ours"><div class="who"><b>routr</b><span>router + repair + Gemini 4 agents</span></div>'
                 f'<div class="sqs">{sq(order)}</div><div class="n">{t["ours"]}<small>/10</small></div></div>')
     legend = (f'<div class="legend"><span><i style="background:var(--text-soft)"></i>classic router alone ({len(t["start"])})</span>'
               f'<span><i style="background:var(--sky)"></i>+ our scripted repair, no model (+{len(t["scripted"])})</span>'
@@ -306,7 +306,7 @@ def limits(rows: list[dict], t: dict) -> str:
 def studio() -> str:
     return """
 <div class="card">
-  <div class="chead"><div><h3>Board routing studio</h3><p class="soft" style="margin:4px 0 0">Shaurya's live viewer: pick a board, press Route, watch the solver's versions arrive and KiCad's rule check judge each one. Replays play recorded runs at their original pace.</p></div>
+  <div class="chead"><div><h3>routr studio</h3><p class="soft" style="margin:4px 0 0">Shaurya's live viewer: pick a board, press Route, watch the solver's versions arrive and KiCad's rule check judge each one. Replays play recorded runs at their original pace.</p></div>
     <div class="chips"><a class="btn lilac" href="http://127.0.0.1:8766/" target="_blank" rel="noopener">Open the studio</a></div></div>
   <figure class="frame live" data-live="http://127.0.0.1:8766/" style="background:var(--sunk);min-height:120px">
     <div class="soft livehint" style="padding:28px;text-align:center">The studio is not running. Start it with <code>web/serve.sh</code> (or <code>pcb/run_studio.sh 8766</code>) and reload this page.</div>

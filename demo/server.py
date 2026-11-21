@@ -1,4 +1,4 @@
-"""Tapeout Crew live stage.  `python -m demo.server [--port 8000]`  (stdlib only, works offline for replays)."""
+"""routr live stage.  `python -m demo.server [--port 8000]`  (stdlib only, works offline for replays)."""
 from __future__ import annotations
 
 import argparse
@@ -782,7 +782,7 @@ def main():
     a = ap.parse_args()
     srv = ThreadingHTTPServer((a.host, a.port), H)
     srv.daemon_threads = True
-    print(f"Tapeout Crew stage: http://{a.host}:{a.port}/   (replay: http://{a.host}:{a.port}/?replay=guard_s0&speed=8)")
+    print(f"routr stage: http://{a.host}:{a.port}/   (replay: http://{a.host}:{a.port}/?replay=guard_s0&speed=8)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

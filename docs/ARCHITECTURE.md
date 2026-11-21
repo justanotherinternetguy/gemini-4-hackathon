@@ -47,7 +47,7 @@ and the solver never reads anything from the viewer.
 | `pcb/replay_run.py` | any Python | Plays a recording into a folder, for the viewer. |
 | `pcb/make_test_frames.py` | any Python | Test fixture: made-up agents. The viewer uses it when no solver command is given and labels the page as test data. |
 | `pcb/create/` | `describe` in our venv, `build` in the system Python | A separate flow: words or a sketch to a small new board. Does not use the contract. |
-| `demo/` | our venv | The earlier analog-sizing stage ("Tapeout Crew"). Separate server; not part of this contract. |
+| `demo/` | our venv | The earlier analog-sizing stage ("routr"). Separate server; not part of this contract. |
 | `third_party/pcbworld/` | - | The benchmark: prepared boards, the engine build (`build_rl/`), the scorer. |
 
 ## File formats

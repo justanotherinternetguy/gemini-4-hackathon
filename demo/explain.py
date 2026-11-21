@@ -1,4 +1,4 @@
-"""Interpretability layer for the Tapeout Crew stage: part explorer, decision trace, ask-the-crew,
+"""Interpretability layer for the routr stage: part explorer, decision trace, ask-the-crew,
 change requests and the PCB board panel.  Everything except ask()/change() is computed from recorded
 run files only (no LLM).  ask()/change() make ONE gemini-4-argon call each, grounded on those files."""
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "runs"
 SWARM = RUNS / "swarm"
-PCB = Path(__import__("os").environ.get("TAPEOUT_PCB_DIR") or RUNS / "pcb")
+PCB = Path(__import__("os").environ.get("ROUTR_PCB_DIR") or __import__("os").environ.get("TAPEOUT_PCB_DIR") or RUNS / "pcb")
 EXPLAIN_MODEL = "gemini-4-argon"
 SPEC_LIMITS = {"pm_deg_min": (45, 80), "ugf_mhz_min": (1, 60), "dc_gain_db_min": (40, 85), "i_core_ua_max": (10, 400)}
 DEFAULT_SPEC = {"pm_deg": [">=", 60.0], "ugf_hz": [">=", 1e7], "dc_gain_db": [">=", 60.0], "i_core_a": ["<=", 1e-4]}
@@ -523,7 +523,7 @@ ASK_SCHEMA = {"type": "object", "properties": {
     "corners_cited": {"type": "array", "items": {"type": "string"}},
     "answered_from_data": {"type": "boolean", "description": "false if the recorded data does not contain the answer"}},
     "required": ["question", "answer", "candidates_cited", "corners_cited", "answered_from_data"]}
-ASK_PROMPT = """You are the Explainer of "Tapeout Crew": a crew of AI agents sized an analog op-amp while the ngspice
+ASK_PROMPT = """You are the Explainer of "routr": a crew of AI agents sized an analog op-amp while the ngspice
 simulator judged every design at 15 process/temperature corners. A visitor at a live demo asks a question.
 Answer in plain English for a non-expert, in 2-4 short sentences (at most 90 words), using ONLY the recorded data below.
 Rules:

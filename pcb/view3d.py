@@ -496,7 +496,7 @@ def main() -> None:
     ap.add_argument("--record-dir", default=str(HERE.parent / "runs" / "recordings"),
                     help="where finished runs are copied for replay ('' to turn off)")
     ap.add_argument("--load", help="benchmark board name to load at start")
-    ap.add_argument("--title", default="Board routing studio")
+    ap.add_argument("--title", default="routr studio")
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--interval", type=float, default=0.3)
     args = ap.parse_args()

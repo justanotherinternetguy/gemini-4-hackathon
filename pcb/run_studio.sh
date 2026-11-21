@@ -13,7 +13,7 @@
 # Environment:
 #   SOLVER_ARGS   extra solver arguments, e.g. SOLVER_ARGS='--no-llm --max-attempts 6' (no Gemini calls)
 #   LOAD          board id to open at start, e.g. LOAD=0471_BlueBerry-Zero_blueberry
-#   TITLE         page title (default 'Board routing studio')
+#   TITLE         page title (default 'routr studio')
 #   KICAD_CLI     rule checker; default is PCBWorld's own build
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,7 +47,7 @@ fi
 echo "boards: $BOARDS ($(ls "$BOARDS" | wc -l))   start: $START ($(ls "$START" | wc -l) boards)"
 
 cd "$ROOT"
-exec "$PY" pcb/view3d.py --cwd "$ROOT" --port "$PORT" --title "${TITLE:-Board routing studio}" \
+exec "$PY" pcb/view3d.py --cwd "$ROOT" --port "$PORT" --title "${TITLE:-routr studio}" \
   --boards-dir "$BOARDS" ${LOAD:+--load "$LOAD"} \
   --watch-dir 'runs/pcb/{run_id}/live/{board}' \
   --route-cmd "$PY -m pcb.repair.swarm --boards {board} --run-id {run_id} --start '$START' ${SOLVER_ARGS:-}"

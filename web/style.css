@@ -1,4 +1,4 @@
-/* Tapeout Crew site. Ithaca design language: cream and ink carry the page; an accent appears only
+/* routr site. Ithaca design language: cream and ink carry the page; an accent appears only
    where something happened (mint = passes/clean, butter = open/filling/warning, coral = failure,
    lilac = somewhere further to go, sky = a Gemini agent at work). */
 :root{
@@ -43,7 +43,7 @@ small{color:var(--text-soft)}
 /* top bar */
 .top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--ground) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .top .wrap{display:flex;align-items:center;gap:16px;height:68px}
-.brand{display:flex;align-items:center;gap:10px;font:600 20px/1 var(--display);color:var(--text);text-decoration:none;white-space:nowrap}
+.brand{display:flex;align-items:center;gap:10px;font:600 24px/1 var(--display);letter-spacing:-.01em;color:var(--text);text-decoration:none;white-space:nowrap}
 .brand i{width:30px;height:30px;border-radius:50%;background:var(--main);display:grid;place-items:center}
 .brand i:after{content:"";width:12px;height:12px;border-radius:50%;background:var(--mint)}
 .tabs{display:flex;gap:4px;background:var(--sunk);padding:4px;border-radius:var(--r-pill);margin-left:auto;overflow-x:auto;scrollbar-width:none}
@@ -52,7 +52,7 @@ small{color:var(--text-soft)}
 .tabs a:hover:not(.on){background:var(--line)}
 .themebtn{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--raised);color:var(--text);cursor:pointer;display:grid;place-items:center;flex:none}
 .themebtn svg{width:18px;height:18px}
-@media (max-width:860px){.tabs{margin-left:0}.brand span{display:none}}
+@media (max-width:860px){.tabs{margin-left:0}}
 
 /* sections */
 section.band{padding:88px 0;border-bottom:1px solid var(--line)}
@@ -188,7 +188,7 @@ svg.chart .pt{stroke:var(--raised);stroke-width:2}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-frame);background:var(--raised)}
 .band.alt .tw{background:var(--ground)}
 table{width:100%;border-collapse:collapse;font-size:15px}
-th{font:600 12px/16px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);text-align:right;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
+th{font:600 13px/16px var(--body);letter-spacing:.01em;color:var(--text-soft);text-align:right;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--sunk)}
 th:first-child,td:first-child{text-align:left}
 td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
 tr:last-child td{border-bottom:0}
