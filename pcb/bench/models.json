@@ -1,0 +1,6 @@
+{
+  "gemini-4-hydrogen": {"api_provider": "google", "api_model": "gemini-4-hydrogen"},
+  "gemini-4-argon":    {"api_provider": "google", "api_model": "gemini-4-argon"},
+  "gemini-4-neon":     {"api_provider": "google", "api_model": "gemini-4-neon"},
+  "gemini-4-carbon":   {"api_provider": "google", "api_model": "gemini-4-carbon"}
+}

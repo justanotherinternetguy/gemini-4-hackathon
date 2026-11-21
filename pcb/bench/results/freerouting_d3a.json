@@ -1,0 +1,902 @@
+{
+ "method": "freerouting 2.1.0 (PCBWorld rule-based runner, 1 seed)",
+ "board_set": "D3-A (configs/datasets/d3.json easy/test, 99 boards)",
+ "scored_by": "the runner's own evaluation (eval.metrics.evaluate_one), not yet the 3-stage pipeline",
+ "clean_pass_rate": 0.8384,
+ "clean_pass": 83,
+ "fully_connected": 87,
+ "n": 99,
+ "boards": [
+  {
+   "board": "0001_rufs__autosave-simple_kicad_schema_and_pcb_v1",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 51.5,
+   "vias": 0
+  },
+  {
+   "board": "0002_rufs_simple_kicad_schema_and_pcb_v1",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 51.5,
+   "vias": 0
+  },
+  {
+   "board": "0003_kitspace_grove_adaptor",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 16.8,
+   "vias": 0
+  },
+  {
+   "board": "0004_S1G-Mod_JST_Adapter",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 68.4,
+   "vias": 0
+  },
+  {
+   "board": "0005_AVR-Playground_hello_world",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 135.6,
+   "vias": 0
+  },
+  {
+   "board": "0006_raspberry_pi_pullup_button_pullup_shutdown_button",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 58.4,
+   "vias": 1
+  },
+  {
+   "board": "0007_raspberry_pi_pullup_button_pullup_shutdown_button(revB)",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 53.5,
+   "vias": 0
+  },
+  {
+   "board": "0008_CapPCB_CapPcb",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 75.2,
+   "vias": 0
+  },
+  {
+   "board": "0009_SmartLaserCO2-PCB_WaterCool",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 112.1,
+   "vias": 0
+  },
+  {
+   "board": "0010_SmartLaserCO2-PCB_OptAdjust",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 79.3,
+   "vias": 0
+  },
+  {
+   "board": "0011_PixyWirelessShield_Shield PIXY",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.8,
+   "error_violations": 1,
+   "wirelength_mm": 120.7,
+   "vias": 0
+  },
+  {
+   "board": "0012_kitspace_ir_sensor",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 230.4,
+   "vias": 0
+  },
+  {
+   "board": "0013_crossover-schiit-stack_xover4schiit",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 171.6,
+   "vias": 0
+  },
+  {
+   "board": "0014_hardware-designs_m-trigger",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.875,
+   "error_violations": 1,
+   "wirelength_mm": 79.2,
+   "vias": 0
+  },
+  {
+   "board": "0015_kitspace_tt_opt101_module_b1",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 61.3,
+   "vias": 0
+  },
+  {
+   "board": "0016_breakout-boards_avr-isp-x2",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 43.3,
+   "vias": 0
+  },
+  {
+   "board": "0017_Blink-Eras_AVR_ISP_Pogo",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 97.6,
+   "vias": 0
+  },
+  {
+   "board": "0018_Hardware_Playground_hy_adapter",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 82.3,
+   "vias": 7
+  },
+  {
+   "board": "0019_CubeSAT-Reaction-Wheel_Edison_Motor_Servo",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 118.5,
+   "vias": 1
+  },
+  {
+   "board": "0020_Cherry-Mx-Bitboard_Cherry Mx Bitboard",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 69.1,
+   "vias": 0
+  },
+  {
+   "board": "0021_RPi-PWM-Fan-interface_RPi PWM Fan interface",
+   "clean_pass": false,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 1,
+   "wirelength_mm": 70.3,
+   "vias": 0
+  },
+  {
+   "board": "0022_OpenVNAVI_motor unit",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 59.0,
+   "vias": 0
+  },
+  {
+   "board": "0023_hardware-designs_si7021-board",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 110.6,
+   "vias": 1
+  },
+  {
+   "board": "0024_memsarray_mems_modules",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.8,
+   "error_violations": 2,
+   "wirelength_mm": 34.8,
+   "vias": 1
+  },
+  {
+   "board": "0025_kitspace_hum_temp_sensor",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 92.1,
+   "vias": 0
+  },
+  {
+   "board": "0026_PCB_constant_current_ac_hv",
+   "clean_pass": false,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 4,
+   "wirelength_mm": 138.5,
+   "vias": 0
+  },
+  {
+   "board": "0027_ID-FIX_scanConnect",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 50.8,
+   "vias": 0
+  },
+  {
+   "board": "0028_hardware-designs_c-trigger",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 86.6,
+   "vias": 0
+  },
+  {
+   "board": "0029_espeverywhere__autosave-espeverywhere_breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 136.2,
+   "vias": 0
+  },
+  {
+   "board": "0030_kitspace_sop8breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 34.6,
+   "vias": 0
+  },
+  {
+   "board": "0031_kitspace_Potentiometer_mount_4LED",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 198.2,
+   "vias": 0
+  },
+  {
+   "board": "0032_kitspace_Potentiometer_mount_8LED",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 313.2,
+   "vias": 0
+  },
+  {
+   "board": "0033_breakout-boards_swd-to-wires",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 94.5,
+   "vias": 1
+  },
+  {
+   "board": "0034_NavigationThing_NavigationThingBacklight",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.857,
+   "error_violations": 2,
+   "wirelength_mm": 46.4,
+   "vias": 0
+  },
+  {
+   "board": "0035_KiCad-Like-a-Pro-Tutorial_rf24-breakout-v1",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 197.8,
+   "vias": 0
+  },
+  {
+   "board": "0036_nRF24breakoutBoard_nRF24-breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 90.9,
+   "vias": 0
+  },
+  {
+   "board": "0037_hardware-designs_spsgrf-board",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 174.5,
+   "vias": 5
+  },
+  {
+   "board": "0038_PCB_serie_led_strip",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 39.1,
+   "vias": 0
+  },
+  {
+   "board": "0039_drawduino_drawduino",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 216.3,
+   "vias": 0
+  },
+  {
+   "board": "0040_oshtimer_transponder",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 70.9,
+   "vias": 0
+  },
+  {
+   "board": "0041_FogDrive_attiny45_slim",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 52.5,
+   "vias": 0
+  },
+  {
+   "board": "0042_starsynctrackers_reset_switch",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 82.6,
+   "vias": 0
+  },
+  {
+   "board": "0043_breakout-boards_swd-and-uart",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 125.8,
+   "vias": 2
+  },
+  {
+   "board": "0044_blink-errr_blink-errr",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 163.5,
+   "vias": 3
+  },
+  {
+   "board": "0045_retroreflectors_TANGOFLOCK",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 124.6,
+   "vias": 0
+  },
+  {
+   "board": "0046_mearm-base-pcb_ServoPCB",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 413.1,
+   "vias": 1
+  },
+  {
+   "board": "0047_LoLin_Designs_LoLin",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 246.6,
+   "vias": 0
+  },
+  {
+   "board": "0048_MySRaspiGW_MySRaspiGW",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.923,
+   "error_violations": 1,
+   "wirelength_mm": 78.0,
+   "vias": 2
+  },
+  {
+   "board": "0049_MySRaspiGW_MySRaspiGW_PA_LNA",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 102.3,
+   "vias": 3
+  },
+  {
+   "board": "0050_MySRaspiGW_MySRaspiGW_PA_LNA_Pimoroni",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 107.8,
+   "vias": 2
+  },
+  {
+   "board": "0051_MySRaspiGW_MySRaspiGW_Pimoroni",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 122.3,
+   "vias": 3
+  },
+  {
+   "board": "0052_breakout-boards_50-to-100",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 111.1,
+   "vias": 4
+  },
+  {
+   "board": "0053_mechkeys_lfk78-jtag",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 124.4,
+   "vias": 0
+  },
+  {
+   "board": "0054_induction-hob_temperature-sensor",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.867,
+   "error_violations": 2,
+   "wirelength_mm": 51.4,
+   "vias": 7
+  },
+  {
+   "board": "0055_dustbox_Dustbox",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 271.8,
+   "vias": 0
+  },
+  {
+   "board": "0056_nrf2rfm69_nrf2rfm69",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.917,
+   "error_violations": 1,
+   "wirelength_mm": 152.1,
+   "vias": 4
+  },
+  {
+   "board": "0057_tepmachcha_tepmachcha",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 208.1,
+   "vias": 0
+  },
+  {
+   "board": "0058_scimpy_powersupply",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 248.4,
+   "vias": 0
+  },
+  {
+   "board": "0059_marlin-neopixel-bridge_ATtiny85_Marneo",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.938,
+   "error_violations": 1,
+   "wirelength_mm": 118.5,
+   "vias": 0
+  },
+  {
+   "board": "0060_Paperino_HW_paperino_breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 163.2,
+   "vias": 0
+  },
+  {
+   "board": "0061_kitspace_temp_breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 252.5,
+   "vias": 0
+  },
+  {
+   "board": "0062_I2CTempsensor_sensors",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 141.3,
+   "vias": 0
+  },
+  {
+   "board": "0063_stlinkv2_breakout_stlink_breakout",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.882,
+   "error_violations": 2,
+   "wirelength_mm": 65.6,
+   "vias": 0
+  },
+  {
+   "board": "0064_kicad-guitar-preamp_Preamp-Instructables",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 148.1,
+   "vias": 0
+  },
+  {
+   "board": "0065_DiscoDanceFloorV1_BusTerminator",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 94.9,
+   "vias": 0
+  },
+  {
+   "board": "0066_ESP8266-WS2811-LEDs_ws2811controller_panels",
+   "clean_pass": false,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 3,
+   "wirelength_mm": 174.2,
+   "vias": 5
+  },
+  {
+   "board": "0067_radio_saw_dcc6c",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 105.6,
+   "vias": 2
+  },
+  {
+   "board": "0068_AVR-ISP_pogo-plug_1.27mm_AVR-ISP_pogo-plug_1.27mm",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 55.7,
+   "vias": 0
+  },
+  {
+   "board": "0069_C-BISCUIT_crowbar",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 136.6,
+   "vias": 2
+  },
+  {
+   "board": "0070_Raspberry-Pi-Soft-Power-Controller_Switching Supply TPS563208 MCI",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 169.5,
+   "vias": 0
+  },
+  {
+   "board": "0071_hackyflasher_Flasher",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 705.1,
+   "vias": 0
+  },
+  {
+   "board": "0072_esp8266_wi07_3_adapter_esp",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 118.9,
+   "vias": 1
+  },
+  {
+   "board": "0073_z2amiller_sensorboard_programmer",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 146.6,
+   "vias": 0
+  },
+  {
+   "board": "0074_kitspace_12V5A_breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 228.3,
+   "vias": 0
+  },
+  {
+   "board": "0075_RPi-ATtiny85-Programmer_rpi_attiny85_programmer",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 215.4,
+   "vias": 0
+  },
+  {
+   "board": "0076_breakout-boards_usb-5v-3v3",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 100.7,
+   "vias": 0
+  },
+  {
+   "board": "0077_HaveSome_PCB_HaveSomePCB",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 78.5,
+   "vias": 1
+  },
+  {
+   "board": "0078_Hardware_Playground_buck_led_driver",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.733,
+   "error_violations": 4,
+   "wirelength_mm": 93.1,
+   "vias": 1
+  },
+  {
+   "board": "0079_Inkjet_InkjetBreakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 259.0,
+   "vias": 2
+  },
+  {
+   "board": "0080_kitspace_RPi_shield",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 334.2,
+   "vias": 0
+  },
+  {
+   "board": "0081_everled_everled",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 161.4,
+   "vias": 3
+  },
+  {
+   "board": "0082_firefly-jar_solar_lamp",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 277.6,
+   "vias": 0
+  },
+  {
+   "board": "0083_DustSensorShield_DustSensorShield",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 502.0,
+   "vias": 8
+  },
+  {
+   "board": "0084_kitspace__autosave-nunchuk_breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 156.4,
+   "vias": 1
+  },
+  {
+   "board": "0085_mini-whip_mini-whip-power-feed",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 257.2,
+   "vias": 4
+  },
+  {
+   "board": "0086_BB-PWR-8009_BB-PWR-8009_revA",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.909,
+   "error_violations": 2,
+   "wirelength_mm": 64.9,
+   "vias": 4
+  },
+  {
+   "board": "0087_solar-lanterns_proto1",
+   "clean_pass": false,
+   "fully_connected": false,
+   "routability": 0.905,
+   "error_violations": 2,
+   "wirelength_mm": 174.2,
+   "vias": 0
+  },
+  {
+   "board": "0088_DA_Lamp_attiny44a_servo_i2c",
+   "clean_pass": false,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 2,
+   "wirelength_mm": 195.1,
+   "vias": 4
+  },
+  {
+   "board": "0089_cobwebb-junction-box_CobwebbJunctionBox",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 457.1,
+   "vias": 0
+  },
+  {
+   "board": "0090_keyboard_converter_adapter_ibm4704_converter_adapter_ibm4704",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 187.5,
+   "vias": 1
+  },
+  {
+   "board": "0091_rufs_dra818v_breakout_board",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 296.3,
+   "vias": 4
+  },
+  {
+   "board": "0092_DerKnopf_power-supply",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 207.1,
+   "vias": 0
+  },
+  {
+   "board": "0093_kitspace_nunchuk_breakout",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 156.1,
+   "vias": 0
+  },
+  {
+   "board": "0094_kitspace_gas_sensor",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 268.8,
+   "vias": 0
+  },
+  {
+   "board": "0095_PsuFanController_FanController",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 161.8,
+   "vias": 0
+  },
+  {
+   "board": "0097_bristle_bot_light_follow_bristle_bot",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 363.0,
+   "vias": 0
+  },
+  {
+   "board": "0098_MSGEQ7-Breakout-Board_MSGEQ7_Breakout_Board",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 205.9,
+   "vias": 0
+  },
+  {
+   "board": "0099_SparkSwitch_SparkProtectionSwitch",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 237.5,
+   "vias": 2
+  },
+  {
+   "board": "0100_smt-zvs-driver_IH10-mc",
+   "clean_pass": true,
+   "fully_connected": true,
+   "routability": 1.0,
+   "error_violations": 0,
+   "wirelength_mm": 220.7,
+   "vias": 0
+  }
+ ]
+}
