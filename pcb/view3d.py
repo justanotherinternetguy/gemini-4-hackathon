@@ -472,6 +472,12 @@ def make_handler(s: Studio, title: str):
                 if path == "/upload":
                     s.load_upload(self.headers.get("X-Name", "board.kicad_pcb"), body.decode(errors="replace"))
                     return self.js({"ok": True})
+                if path == "/explain":
+                    # Gemini's read on one unmade connection; see gemini_explain.py
+                    import gemini_explain
+                    out = gemini_explain.explain(json.loads(body or b"{}"))
+                    out["retry_available"] = False      # there is no POST /retry: do not offer a fix button
+                    return self.js(out)
                 if path == "/stop":
                     s.stop_route()
                     return self.js({"ok": True})
