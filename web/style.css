@@ -325,6 +325,17 @@ details.round summary .soft{font:400 14px var(--body)}
 .shot{margin:0}
 .shot img{border-radius:var(--r-frame);border:1px solid var(--line);display:block}
 .shot figcaption{font-size:14px;color:var(--text-soft);margin-top:8px}
+/* hero: words on the left, the studio GIF on the right */
+.hero .wrap.split{display:grid;grid-template-columns:minmax(0,.86fr) minmax(0,1.14fr);gap:48px;align-items:center}
+.hero .split h1,.hero.simple .split h1{font-size:clamp(40px,4.4vw,64px);line-height:1.02}
+.hero .split .lede{font-size:18px}
+.hero .split .cta{gap:10px}.hero .split .cta .btn{padding-left:20px;padding-right:20px}
+.herogif{margin:0}
+.herogif img{width:100%;height:auto;border-radius:var(--r-frame);box-shadow:0 2px 0 var(--line),0 24px 60px rgba(30,24,10,.16)}
+.herogif figcaption{font-size:13px;line-height:1.45;margin-top:12px}
+.hero .split + .wrap .kpis{margin-top:56px}
+@media (max-width:1020px){.hero .wrap.split{grid-template-columns:1fr;gap:40px}
+  .hero .split h1,.hero.simple .split h1{font-size:clamp(40px,9vw,72px)}}
 @media (max-width:1000px){.team{grid-template-columns:repeat(2,1fr)}.rounds{grid-template-columns:repeat(2,1fr)}
   .lstep:after{display:none}.counts{grid-template-columns:repeat(2,1fr)}.jobs,.watch{grid-template-columns:1fr}}
 @media (max-width:640px){.team,.rounds{grid-template-columns:1fr}.swarmcap{grid-template-columns:1fr;text-align:left}

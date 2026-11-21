@@ -221,6 +221,8 @@ def run_agent(i: int, a, hints: list, image: Path, live: Publisher, done: thread
         for step in range(a.steps):
             if obs["clean"] or done.is_set() or time.time() > deadline:
                 break
+            live.event("think", agent=tag, text=f"step {step + 1}: deciding the next action from KiCad's report "
+                                               f"({obs['errors'] - obs['open']} violation(s), {obs['open']} open)")
             try:
                 act = ask_agent(c, temperament, obs, hints, steps, image if step == 0 else None, a.steps - step, log)
             except Exception as e:
@@ -235,7 +237,9 @@ def run_agent(i: int, a, hints: list, image: Path, live: Publisher, done: thread
                 steps.append({"action": "stop", "nets": [], "before": before, "after": before, "open_after": obs["open"],
                               "thought": act.get("thought", "")})
                 break
-            live.event("start", agent=tag, net=f"{kind} {', '.join(names.get(str(n), str(n)) for n in ns)}".strip())
+            live.event("start", agent=tag, net=f"{kind} {', '.join(names.get(str(n), str(n)) for n in ns)}".strip(),
+                       nets=[names.get(str(n), str(n)) for n in ns], why=str(act.get("thought", ""))[:200],
+                       step=step + 1, of=a.steps)
             try:
                 if kind == "restore_best":
                     eng.call("restore", handle=best_h)
@@ -314,9 +318,12 @@ def main() -> None:
     if obs["clean"]:
         live.result(True, 0, [])
         return
+    live.event("phase", name="fix", text=f"KiCad's rule checker still flags {n_viol} violation(s) and {obs['open']} "
+                                         f"open connection(s): Gemini agents fix that exact board")
     live.event("note", agent="gemini", text=f"Gemini is fixing {n_viol} rule violation(s) and {obs['open']} open "
                                             f"connection(s) found by the rule checker")
     hints: list = []
+    live.event("think", agent="decision", text="reading the board picture: for each clashing pair, which net should move?")
     try:
         hints = screen_pairs(_client(), obs, image, work / "llm_calls.jsonl")
         for h in hints:
@@ -324,6 +331,7 @@ def main() -> None:
                                                       f"({round(100 * h['p'])}%)")
     except Exception as e:
         print(f"[fix] Decisions API screen failed: {str(e)[:120]}", flush=True)
+    live.event("think", agent="decision", text="")
 
     done, deadline = threading.Event(), time.time() + a.wall
     with ThreadPoolExecutor(a.agents) as ex:

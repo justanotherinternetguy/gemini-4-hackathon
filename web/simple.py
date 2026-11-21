@@ -10,7 +10,7 @@ import random
 import subprocess
 
 from web import analog, pcb, scale
-from web.kit import OUT, ROOT, asset
+from web.kit import OUT, ROOT, asset, studio_gif
 
 # role -> (colour token, plain name, model, what it does)
 TEAM = [
@@ -197,14 +197,14 @@ def page_body() -> str:
             f'on this board; Gemini fixed them on the spot.</figcaption></figure>' if studio else "")
     return f"""
 <header class="hero simple" id="top">
-  <div class="wrap">
+  <div class="wrap split"><div class="herotext">
     <div class="eyebrow"><span class="dot" style="background:var(--sky)"></span>routr · Gemini 4 hackathon</div>
     <h1>Agents that finish the <em>hardware</em> design.</h1>
     <p class="lede">routr is a swarm of Gemini AI agents that finishes electronics designs where people and classic
       tools get stuck. The agents come up with the ideas. A real engineering checker tests every one before it counts.</p>
     <div class="cta"><a class="btn main" href="#swarm">See the swarm</a><a class="btn paper" href="#watch">Watch it work</a>
       <a class="btn lilac" href="evidence.html">Full evidence</a></div>
-  </div>
+  </div>{studio_gif()}</div>
 </header>
 
 <section class="band alt" id="swarm">

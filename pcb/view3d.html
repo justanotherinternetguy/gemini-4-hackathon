@@ -61,11 +61,56 @@
 
   .bigrow { display:flex; align-items:baseline; gap:8px; } .big { font-size:40px; font-weight:700; line-height:1.05; }
   .bar { height:6px; border-radius:99px; background:var(--fill); overflow:hidden; } .bar i { display:block; height:100%; width:0; background:var(--good); transition:width .3s ease; }
-  .agents { margin:14px 0 0; } .agent { display:flex; align-items:center; gap:8px; padding:3px 0; }
-  .agent i { width:9px; height:9px; border-radius:50%; flex:none; } .agent b { font-weight:600; min-width:48px; }
-  .agent span { color:var(--ink3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .agent.busy span { color:var(--ink); }
+  /* what the agents are doing: pipeline, agent cards, judged attempts, caption over the board */
+  .pipe { margin:14px 0 2px; }
+  .ps { display:grid; grid-template-columns:18px 1fr; gap:9px; position:relative; padding:0 0 8px; }
+  .ps::before { content:""; position:absolute; left:8px; top:18px; bottom:0; width:2px; background:var(--line); }
+  .ps:last-child::before { display:none; } .ps.done::before { background:var(--good); opacity:.45; }
+  .ps .d { width:18px; height:18px; border-radius:50%; border:2px solid var(--line2); background:var(--bg); z-index:1;
+    display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#fff; }
+  .ps b { font-weight:600; display:block; color:var(--ink3); line-height:18px; }
+  .ps small { display:none; color:var(--ink2); font-size:12px; line-height:1.38; margin-top:1px; }
+  .ps.done .d { background:var(--good); border-color:var(--good); } .ps.done .d::after { content:"✓"; }
+  .ps.done b { color:var(--ink2); } .ps.skip b { color:var(--ink3); font-weight:500; } .ps.skip .d { border-style:dashed; }
+  .ps.on .d { border-color:#d9741a; animation:ring 1.5s ease-out infinite; } .ps.on .d::after { content:""; width:8px; height:8px; border-radius:50%; background:#d9741a; }
+  .ps.on b { color:var(--ink); } .ps.on small, .ps.done small.live { display:block; } .ps.done small.live { color:var(--ink3); }
+  .agents { margin:4px 0 0; }
+  .agent { --c:#888; border:1px solid var(--line); border-radius:9px; padding:7px 10px 8px; margin:0 0 6px; transition:border-color .2s, box-shadow .2s; }
+  .agent.busy { border-color:var(--c); box-shadow:inset 3px 0 0 var(--c); }
+  .agent .ah { display:flex; align-items:center; gap:7px; min-width:0; }
+  .agent .ah i { width:9px; height:9px; border-radius:50%; flex:none; background:var(--c); } .agent .ah b { font-weight:650; white-space:nowrap; }
+  .agent .cnt { margin-left:auto; color:var(--ink3); font-size:11.5px; white-space:nowrap; }
+  .agent .st { margin-top:5px; font-size:12.5px; color:var(--ink2); display:flex; gap:7px; align-items:flex-start; line-height:1.38; }
+  .agent.busy .st { color:var(--ink); }
+  .spin { width:11px; height:11px; border-radius:50%; border:2px solid var(--c); border-right-color:transparent; animation:spin .8s linear infinite; flex:none; display:none; margin-top:3px; }
+  .agent.busy .spin { display:inline-block; } @keyframes spin { to { transform:rotate(360deg); } }
+  .agent .last { margin-top:4px; font-size:12px; color:var(--ink3); } .agent .last .star { color:#d9741a; font-weight:700; }
+  .task { position:relative; overflow:hidden; margin-top:5px; padding:5px 8px 6px; border-radius:6px; background:var(--fill); font-size:12px; line-height:1.38; }
+  .task::after { content:""; position:absolute; left:-35%; bottom:0; height:2px; width:35%; background:var(--c); animation:slide 1.5s ease-in-out infinite; }
+  @keyframes slide { to { left:100%; } }
+  .task b { font-weight:600; } .task .tm { float:right; color:var(--ink3); margin-left:6px; font-variant-numeric:tabular-nums; }
+  .task .nets { display:block; color:var(--ink2); } .task .why { display:block; color:var(--ink3); font-style:italic; }
+  .task.more { background:none; padding:2px 0 0; color:var(--ink3); } .task.more::after { display:none; }
+  .atts { display:flex; align-items:flex-end; gap:3px; height:58px; padding-top:14px; border-bottom:1px solid var(--line2); position:relative; }
+  .atts .base { position:absolute; left:0; right:0; border-top:1px dashed var(--ink3); opacity:.6; pointer-events:none; }
+  .atts .base span { position:absolute; right:0; top:-15px; font-size:10.5px; color:var(--ink3); }
+  .atts > div:not(.base) { flex:1 1 0; max-width:15px; min-width:4px; border-radius:3px 3px 0 0; background:var(--c); opacity:.55; position:relative; transform-origin:bottom; animation:grow .45s cubic-bezier(.2,.9,.3,1.2) both; }
+  .atts > div.best { opacity:1; } .atts > div.best::after { content:"★"; position:absolute; top:-14px; left:50%; transform:translateX(-50%); font-size:11px; color:#d9741a; }
+  .atts > div.clean { box-shadow:0 0 0 2px var(--goodbg), 0 0 0 3px var(--good); }
+  @keyframes grow { from { transform:scaleY(0); } }
+  .attcap { font-size:12px; color:var(--ink2); margin:5px 0 0; }
   .log { font:11.5px/1.7 var(--mono); color:var(--ink2); max-height:190px; overflow:hidden; display:flex; flex-direction:column-reverse; }
-  .log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .log b { font-weight:600; }
+  .narr { position:absolute; left:50%; top:14px; transform:translateX(-50%); width:min(700px, calc(100% - 32px)); display:flex; gap:12px; align-items:flex-start;
+    background:rgba(255,255,255,.95); border:1px solid var(--line); border-radius:12px; padding:10px 16px 11px; box-shadow:0 8px 28px rgba(23,28,25,.12); pointer-events:none; }
+  .narr > i { width:11px; height:11px; border-radius:50%; margin-top:5px; flex:none; background:#888; }
+  .narr small { display:flex; gap:6px; align-items:center; font-size:11.5px; color:var(--ink3); font-weight:600; letter-spacing:.02em; margin-bottom:1px; }
+  .narr span.tx { display:block; font-size:15.5px; font-weight:560; line-height:1.36; color:var(--ink); }
+  .narr .q { margin-left:auto; color:var(--ink3); font-weight:500; }
+  .narr.flash { animation:narrIn .38s ease both; } @keyframes narrIn { from { opacity:0; transform:translate(-50%,-8px); } to { opacity:1; transform:translate(-50%,0); } }
+  .vsum { margin:12px 0 0; border-top:1px solid var(--line); padding-top:8px; }
+  .vsum > div { display:flex; flex-wrap:wrap; align-items:center; column-gap:7px; padding:3px 0 4px; font-size:12.5px; } .vsum i { width:8px; height:8px; border-radius:50%; flex:none; }
+  .vsum b { font-weight:600; } .vsum span.r { flex-basis:100%; padding-left:15px; color:var(--ink2); }
   .res h2 { margin:0 0 4px; font-size:19px; font-weight:680; } .res.pass h2 { color:var(--good); } .res.need h2 { color:var(--warn); }
   .res p { margin:0 0 10px; color:var(--ink2); }
   .need { margin:12px 0 0; border-top:1px solid var(--line); }
@@ -123,6 +168,7 @@
     <div class="legend hide" id="legend"><span><i style="background:#d98632"></i>front copper</span><span><i style="background:#4f86d9"></i>back copper</span><span><i style="background:#e23d4f"></i>still to connect</span></div>
     <div class="view hide" id="view"><button class="small" id="ghost">Solid parts</button><button class="small" id="spin">Pause spin</button></div>
     <div id="tips"></div><div class="tip hide" id="place" style="background:#171c19"></div>
+    <div class="narr hide" id="narr"><i id="narr-dot"></i><div style="flex:1;min-width:0"><small><span id="narr-who"></span><span class="q" id="narr-t"></span></small><span class="tx" id="narr-text"></span></div></div>
   </div>
 
   <div class="right hide" id="right">
@@ -130,7 +176,9 @@
       <p class="k">Swarm · <span id="clock" class="num">0:00</span></p>
       <div class="bigrow"><span class="big num" id="open">–</span><span id="total" style="color:var(--ink2)"></span></div>
       <div class="bar" style="margin:8px 0 0"><i id="bar"></i></div>
-      <div class="agents" id="agents"></div>
+      <div class="pipe" id="pipe"></div>
+      <div id="attbox" class="hide"><p class="k" style="margin-top:8px">Attempts judged by KiCad · lower is better</p><div class="atts" id="atts"></div><p class="attcap" id="attcap"></p></div>
+      <p class="k" style="margin-top:10px">Agents · what each one is doing now</p><div class="agents" id="agents"></div>
       <p class="k" style="margin-top:16px">Activity</p><div class="log" id="log"></div>
     </div>
     <div id="result" class="res hide"></div>
@@ -173,7 +221,7 @@ function fit() { SW = stage.clientWidth || 1; SH = stage.clientHeight || 1; rend
 new ResizeObserver(fit).observe(stage); fit();
 const toScreen = v => { v.project(camera); return [(v.x + 1) / 2 * SW, (1 - v.y) / 2 * SH]; };
 
-let C = { x: 0, y: 0 }, SPAN = 60;
+let C = { x: 0, y: 0 }, SPAN = 60, BW = 60, BH = 60, nameToCode = {}, padsByNet = new Map();
 const P = (x, y) => [x - C.x, y - C.y];
 const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: .62, metalness: .05, ...o });
 const M = {
@@ -187,15 +235,17 @@ const ringGeo = new THREE.CylinderGeometry(1, 1, 1, 20), boxGeo = new THREE.BoxG
 // ---------- state ----------
 let phase = 'import', epoch = -1, nets = {}, frames = [], heavy = [], applied = -1, total = null, lastState = {};
 let boardMesh = null, bigParts = [], ghost = true, asm = [], asmT = 0, asmEnd = 0, fly = null, routeT0 = 0, outcome = '';
-let copperGroup, webGroup, violGroup; const copper = new Map(), agents = new Map(), settle = [], ripping = [];
+let copperGroup, webGroup, violGroup, focusGroup, scanMesh = null; const copper = new Map(), agents = new Map(), settle = [], ripping = [];
 const webMat = new THREE.MeshBasicMaterial({ color: 0xe23d4f, transparent: true, opacity: 0, depthWrite: false }); let webShown = 0;
 
 function resetWorld() {
   scene.remove(world); world = new THREE.Group(); scene.add(world);
-  copperGroup = new THREE.Group(); webGroup = new THREE.Group(); violGroup = new THREE.Group(); world.add(copperGroup, webGroup, violGroup);
+  copperGroup = new THREE.Group(); webGroup = new THREE.Group(); violGroup = new THREE.Group(); focusGroup = new THREE.Group();
+  world.add(copperGroup, webGroup, violGroup, focusGroup); scanMesh = null;
   copper.clear(); settle.length = ripping.length = 0; bigParts = []; asm = []; boardMesh = null; fly = null;
   for (const a of agents.values()) a.tip.remove(); agents.clear(); $('agents').innerHTML = ''; $('parts').innerHTML = ''; $('log').innerHTML = '';
   frames = []; heavy = []; applied = -1; total = null; webShown = 0; webMat.opacity = 0; outcome = '';
+  resetRun();
 }
 function setGhost(on) { ghost = on; for (const m of bigParts) m.userData.to = on ? .2 : 1; $('ghost').textContent = on ? 'Solid parts' : 'Glass parts'; }
 function flyTo(x, y, z, dist) { controls.autoRotate = false; $('spin').textContent = 'Spin';
@@ -205,8 +255,17 @@ function flyTo(x, y, z, dist) { controls.autoRotate = false; $('spin').textConte
 let scenePads = [];
 function buildScene(s) {
   resetWorld(); nets = s.nets || {}; scenePads = s.pads || [];
+  nameToCode = {}; padsByNet = new Map();
+  for (const [code, name] of Object.entries(nets)) if (name) nameToCode[name] = code;
+  for (const p of scenePads) if (p.net) { const k = String(p.net); if (!padsByNet.has(k)) padsByNet.set(k, []); padsByNet.get(k).push(p); }
   const [x0, y0, x1, y1] = s.bbox; C = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
-  const W = x1 - x0, H = y1 - y0; SPAN = Math.max(W, H);
+  const W = x1 - x0, H = y1 - y0; SPAN = Math.max(W, H); BW = W; BH = H;
+  scanMesh = new THREE.Group();                    // sweeps the board while a model reads its picture
+  const scanMat = new THREE.MeshBasicMaterial({ color: 0x2f8fe6, transparent: true, opacity: .75, depthTest: false });
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x2f8fe6, transparent: true, opacity: .14, depthTest: false, side: THREE.DoubleSide });
+  const line = new THREE.Mesh(new THREE.BoxGeometry(W * 1.04, .06, Math.max(.25, H * .006)), scanMat);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.04, Math.max(2, H * .09)), glowMat); glow.rotation.x = -Math.PI / 2; glow.position.z = -Math.max(1, H * .045);
+  scanMesh.add(line, glow); scanMesh.position.y = .9; scanMesh.visible = false; scanMesh.renderOrder = 5; line.renderOrder = glow.renderOrder = 5; world.add(scanMesh);
   boardMesh = new THREE.Mesh(new THREE.BoxGeometry(W, T, H), mat(0x2f6b54, { roughness: .78, transparent: true, opacity: 1 }));
   boardMesh.position.y = -T / 2; boardMesh.receiveShadow = true; boardMesh.castShadow = true; boardMesh.scale.setScalar(.001); world.add(boardMesh);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(SPAN * 12, SPAN * 12), new THREE.ShadowMaterial({ opacity: .16 }));
@@ -312,10 +371,16 @@ function agent(name) {
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(.12, .5, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color: c3, transparent: true, opacity: .32, side: THREE.DoubleSide }));
   marker.add(orb, beam); marker.visible = false; world.add(marker);
   const tip = document.createElement('div'); tip.className = 'tip'; tip.style.background = color; tip.textContent = key; tip.style.display = 'none'; $('tips').append(tip);
-  const el = document.createElement('div'); el.className = 'agent'; el.innerHTML = `<i style="background:${color}"></i><b></b><span>idle</span>`; el.children[1].textContent = key; $('agents').append(el);
-  const a = { name: key, color: c3, queue: [], burst: [], job: null, marker, orb, beam, tip, el, done: 0 }; agents.set(key, a); return a;
+  const r = roleOf(key), el = document.createElement('div'); el.className = 'agent'; el.style.setProperty('--c', color);
+  el.innerHTML = `<div class="ah"><i></i><b></b><span class="cnt"></span></div>` +
+    '<div class="st"><span class="spin"></span><span class="sx">idle</span></div><div class="tasks"></div><div class="last"></div>';
+  el.querySelector('b').textContent = key; $('agents').append(el);
+  const a = { name: key, css: color, color: c3, queue: [], burst: [], job: null, marker, orb, beam, tip, el, done: 0, role: r,
+              tasks: new Map(), thinking: null, focus: [], tries: 0, last: null, copyText: 'idle', copyBusy: false, flashNets: null, flashUntil: 0,
+              hp: new THREE.Vector3(), hpSet: false, idx: agents.size };
+  agents.set(key, a); return a;
 }
-const say = (a, text, busy) => { a.el.lastChild.textContent = text; a.el.classList.toggle('busy', !!busy); };
+const say = (a, text, busy) => { a.copyText = text; a.copyBusy = !!busy; renderAgent(a); };
 let solverEvents = 0;
 function eventLine(e) {
   const who = e.agent ? e.agent + ' ' : '';
@@ -326,13 +391,15 @@ function eventLine(e) {
     case 'attempt': return (e.best ? '★ ' : '') + who + `${e.open ?? '?'} open, ${e.errors ?? '?'} errors` + (e.plan ? ' · ' + e.plan : '');
     case 'done': return who + 'connected ' + (e.net || '');
     case 'fail': return who + 'gave up on ' + (e.net || '') + (e.reason ? ': ' + e.reason : '');
+    case 'phase': return '— ' + (e.text || e.name || '');
     default: return who + (e.type || '') + (e.net ? ' ' + e.net : '');
   }
 }
 function showEvents(evs) {
   if (!evs || evs.length === solverEvents) return; solverEvents = evs.length;
   $('log').innerHTML = '';
-  for (const e of evs.slice(-10)) { const row = document.createElement('div'); row.textContent = mmss(e.t || 0) + '  ' + eventLine(e); row.title = row.textContent;
+  for (const e of evs.filter(e => e.type !== 'think').slice(-10)) { const row = document.createElement('div'); row.textContent = mmss(e.t || 0) + '  ' + eventLine(e); row.title = row.textContent;
+    if (e.agent && agents.has(e.agent)) row.style.borderLeft = `3px solid ${agents.get(e.agent).css}`, row.style.paddingLeft = '6px';
     if (e.type === 'attempt' && e.best) row.style.color = 'var(--good)'; if (e.type === 'fail') row.style.color = 'var(--bad)'; $('log').prepend(row); }
 }
 function log(t, text) { if (solverEvents) return; const row = document.createElement('div'); row.textContent = mmss(t) + '  ' + text; $('log').prepend(row); while ($('log').children.length > 9) $('log').lastChild.remove(); }
@@ -343,6 +410,194 @@ function chain(segs) {
     const s = left.splice(bi, 1)[0]; out.push(flip ? { ...s, a: s.b, b: s.a } : s); tip = out[out.length - 1].b; }
   return out;
 }
+
+// ---------- what the agents are doing, from the solver's events.jsonl (pcb/CONTRACT.md) ----------
+const ROLES = [
+  [/^router$/, 'Freerouting', false, 'Classic autorouter. Makes the first pass; the agents repair what it leaves.'],
+  [/^decision/, 'Gemini Decisions API', true, 'Looks at a picture of the board and rates which tracks are in the way.'],
+  [/^hydrogen-(.+)$/, 'Gemini 4 Hydrogen', true, m => `Fix agent, “${m[1]}” style. One action at a time on its own copy of the board.`],
+  [/^hydrogen/, 'Gemini 4 Hydrogen', true, 'Fast planner. Picks which tracks to rip up and the order to re-route.'],
+  [/^carbon/, 'Gemini 4 Carbon', true, 'Deep planner. Slower, more careful plans that join when ready.'],
+  [/^neon/, 'Gemini 4 Neon', true, 'Reviewer. Reads the board picture.'],
+  [/^gemini$/, 'Gemini', true, 'Runs the fix round on what the rule checker found.'],
+  [/^script$/, 'No AI · control', false, 'Scripted repairs: the baseline the agents have to beat.'],
+  [/^random$/, 'No AI · control', false, 'Random rip-up plans: a like-for-like control.'],
+];
+function roleOf(name) { for (const [re, badge, ai, role] of ROLES) { const m = re.exec(name); if (m) return { badge, ai, role: typeof role === 'function' ? role(m) : role }; }
+  return { badge: '', ai: false, role: '' }; }
+const STAGES = [
+  ['load', 'Classic router', 'Freerouting made the first pass. KiCad measures what it left unfinished.'],
+  ['screen', 'Gemini reads the board', 'The Decisions API looks at a picture of the board and rates which tracks block each open connection.'],
+  ['rounds', 'Repair rounds', 'Agents try plans in parallel, each on its own copy of the board. KiCad judges every attempt.'],
+  ['fix', 'Rule fix', 'Gemini agents fix what KiCad’s rule checker still flags, on that exact board.'],
+  ['verdict', 'Verdict', 'KiCad’s design-rule checker decides.'],
+];
+const pretty = n => String(n || '').replace(/[-_]+/g, ' ').trim();
+const listN = (a, n = 3) => a.slice(0, n).join(', ') + (a.length > n ? ` +${a.length - n} more` : '');
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const secsSince = t0 => Math.max(0, Math.round((performance.now() - t0) / 1000));
+let evSeen = 0, evKey = '', attemptsList = [], runStage = 'load', visited = new Set(['load']), stageLive = {}, roundNo = 0, startLevel = null;
+let narrQ = [], narrAt = -1e9, focusDirty = false, fixingNow = false;
+
+function resetRun() {
+  evSeen = 0; evKey = ''; attemptsList = []; runStage = 'load'; visited = new Set(['load']); stageLive = {}; roundNo = 0; startLevel = null;
+  narrQ = []; narrAt = -1e9; focusDirty = true; fixingNow = false;
+  $('atts').innerHTML = ''; $('attcap').textContent = ''; show('attbox', false); show('narr', false);
+  for (const a of agents.values()) { a.tasks.clear(); a.thinking = null; a.tries = 0; a.last = null; a.flashNets = null; a.focus = []; a.hpSet = false; renderAgent(a); }
+  renderPipe();
+}
+function setStage(k) {
+  const i = STAGES.findIndex(x => x[0] === k), cur = STAGES.findIndex(x => x[0] === runStage);
+  if (i < 0) return; visited.add(k); if (i > cur) runStage = k; renderPipe();
+}
+function renderPipe() {
+  const cur = STAGES.findIndex(x => x[0] === runStage);
+  $('pipe').innerHTML = STAGES.map(([k, title, d], i) => {
+    const cls = i < cur ? (visited.has(k) ? 'done' : 'skip') : i === cur ? 'on' : '';
+    const live = stageLive[k], sub = i === cur ? (live ? `${d} <b style="font-weight:600;color:var(--ink)">${esc(live)}</b>` : d) : (live && i < cur ? esc(live) : '');
+    const note = i < cur && !visited.has(k) ? (k === 'fix' ? ' · not needed' : ' · skipped') : '';
+    return `<div class="ps ${cls}"><span class="d"></span><div><b>${esc(title)}${note}</b>${sub ? `<small class="${i < cur ? 'live' : ''}">${sub}</small>` : ''}</div></div>`;
+  }).join('');
+}
+function renderAgent(a) {
+  const el = a.el, tasks = [...a.tasks.values()];
+  let text = a.copyText || 'idle', busy = a.copyBusy;
+  if (!busy && a.thinking) { text = `Thinking · ${a.thinking.text} (${secsSince(a.thinking.t0)} s)`; busy = true; }
+  else if (!busy && tasks.length) { text = tasks.length === 1 ? (tasks[0].step ? 'Running its action in KiCad’s router' : 'Its plan is running in KiCad’s router')
+                                                         : `${tasks.length} plans running in KiCad’s router at once`; busy = true; }
+  el.querySelector('.sx').textContent = text; el.classList.toggle('busy', busy);
+  el.querySelector('.cnt').textContent = a.tries ? plural(a.tries, 'attempt') : (a.done ? `${a.done} laid` : '');
+  el.querySelector('.tasks').innerHTML = tasks.slice(0, 3).map(t => {
+    const what = t.step ? '' : [t.ripup.length ? 'rip up ' + listN(t.ripup) : '', t.nets.length ? 're-route ' + listN(t.nets) : ''].filter(Boolean).join(' → ');
+    return `<div class="task"><span class="tm">${secsSince(t.t0)} s</span><b>${esc(t.step ? `Step ${t.step}: ${t.name}` : pretty(t.name))}</b>` +
+      (what ? `<span class="nets">${esc(what)}</span>` : '') + (t.why ? `<span class="why">“${esc(t.why)}”</span>` : '') + '</div>';
+  }).join('') + (tasks.length > 3 ? `<div class="task more">+ ${tasks.length - 3} more running</div>` : '');
+  const L = a.last;
+  el.querySelector('.last').innerHTML = L ? `Last result: ${resultText(L)}${L.best ? ' <span class="star">★ new best</span>' : ''}` : '';
+}
+const resultText = L => L.clean ? 'clean board ✓' : [L.open != null ? plural(L.open, 'open connection') : '', L.errors != null ? plural(L.errors, 'rule error') : ''].filter(Boolean).join(', ') || 'judged';
+function narrate(who, text, color) {
+  if (!text) return; narrQ.push({ who, text, color: color || '#171c19', t: performance.now() });
+  if (narrQ.length > 3) narrQ.splice(0, narrQ.length - 3);       // never fall far behind the run
+}
+function stepNarration() {
+  const now = performance.now(), dwell = narrQ.length > 1 ? 1700 : 3000;
+  if (!narrQ.length || now - narrAt < dwell || phase !== 'routing') { if (phase !== 'routing') show('narr', false); return; }
+  const n = narrQ.shift(); narrAt = now; const el = $('narr');
+  $('narr-dot').style.background = n.color; $('narr-who').textContent = n.who; $('narr-text').textContent = n.text;
+  $('narr-t').textContent = mmss((now - routeT0) / 1000);
+  el.classList.remove('hide', 'flash'); void el.offsetWidth; el.classList.add('flash');
+}
+const whoLine = name => name;
+function addAttempt(e, a) {
+  attemptsList.push({ agent: a, open: e.open, errors: e.errors, best: !!e.best, clean: !!e.clean, plan: e.plan });
+  show('attbox', true);
+  const score = x => (x.open ?? 0) + (x.errors ?? 0);
+  const max = Math.max(1, startLevel ?? 0, ...attemptsList.map(score)), box = $('atts');
+  if (startLevel != null && !box.querySelector('.base')) box.insertAdjacentHTML('afterbegin', '<div class="base"><span>classic router</span></div>');
+  const base = box.querySelector('.base'); if (base) base.style.bottom = (100 * startLevel / max * .86) + '%';
+  const bar = document.createElement('div'), x = attemptsList[attemptsList.length - 1];
+  bar.style.setProperty('--c', a.css); bar.className = (x.best ? 'best ' : '') + (x.clean ? 'clean' : '');
+  bar.title = `${a.name} · ${pretty(x.plan)}: ${resultText(x)}`; box.append(bar);
+  for (const [i, b] of [...box.querySelectorAll(':scope > div:not(.base)')].entries())
+    b.style.height = Math.max(4, 86 * score(attemptsList[i]) / max) + '%';
+  const best = attemptsList.reduce((b, y) => (!b || score(y) < score(b) ? y : b), null);
+  $('attcap').innerHTML = `${plural(attemptsList.length, 'attempt')} so far · best: <b>${esc(resultText(best))}</b> (${esc(best.agent.name)})`;
+  stageLive.rounds = `Round ${roundNo || 1} · ${plural(attemptsList.length, 'attempt')} judged`;
+}
+function ingest(s) {
+  const key = s.attempt + ':' + s.fix_round;
+  if (key !== evKey) { evKey = key; evSeen = 0; for (const a of agents.values()) { a.tasks.clear(); a.thinking = null; } focusDirty = true;
+    if (s.fix_round) { setStage('fix'); stageLive.fix = `Round ${s.fix_round}`; renderPipe(); } }
+  fixingNow = !!s.fixing;
+  const evs = s.events || []; if (evs.length < evSeen) evSeen = 0;
+  const fresh = evs.slice(evSeen); evSeen = evs.length;
+  for (let i = 0; i < fresh.length; i++) {
+    const e = fresh[i];
+    if (e.type === 'start' || e.type === 'attempt') {      // a burst of plans starting or being judged together tells one story
+      let j = i; while (j + 1 < fresh.length && fresh[j + 1].type === e.type && Math.abs((fresh[j + 1].t || 0) - (e.t || 0)) < 1) j++;
+      const group = fresh.slice(i, j + 1); i = j;
+      if (e.type === 'start') startGroup(group); else attemptGroup(group);
+      continue;
+    }
+    const a = !e.agent ? null : (e.type === 'think' && !e.text) ? agents.get(e.agent) : agent(e.agent);
+    if (e.type === 'phase') { setStage({ load: 'load', screen: 'screen', plan: 'rounds', fix: 'fix' }[e.name] || runStage); narrate('routr', e.text); }
+    else if (e.type === 'think') {
+      if (!a) continue; a.thinking = e.text ? { text: e.text, t0: performance.now() } : null; renderAgent(a);
+      if (e.text && !/^hydrogen-/.test(a.name)) narrate(whoLine(a.name), `${a.name} is ${e.text}`, a.css);
+      if (/^decision/.test(a.name) && e.text) setStage(runStage === 'load' ? 'screen' : runStage);
+    } else if (e.type === 'note') {
+      if (a) { a.thinking = null; renderAgent(a); }
+      let text = e.text || '';
+      if (a?.name === 'router') { const m = /left (\d+) open.*?(\d+) rule/.exec(text);
+        if (m) { startLevel = +m[1] + +m[2]; stageLive.load = `Left ${plural(+m[1], 'open connection')} and ${plural(+m[2], 'rule error')}.`; }
+        text = 'The ' + text.replace(/^classic router/, 'classic router') + '. The agents take it from here.'; renderPipe(); }
+      const blk = [...text.matchAll(/(?:^|, |: )([^,:()]+?) \((\d+)%\)/g)].map(m => m[1].trim()).filter(n => nameToCode[n]);
+      const mv = /move (.+?), keep/.exec(text);
+      if (a && (blk.length || (mv && nameToCode[mv[1]]))) { a.flashNets = blk.length ? blk : [mv[1]]; a.flashUntil = performance.now() + 9000; focusDirty = true; }
+      if (/^blocker screen: /.test(text)) { stageLive.screen = 'Most likely in the way: ' + text.slice(16); text = stageLive.screen + ' (the chance that ripping that net up is needed)'; renderPipe(); }
+      narrate(a ? whoLine(a.name) : 'routr', text, a?.css);
+    } else if (e.type === 'round') {
+      roundNo = e.n || roundNo + 1; setStage('rounds');
+      const kind = /^scripted/.test(e.name) ? 'scripted plans, no AI' : /^llm/.test(e.name) ? 'plans written by Gemini' : /^random/.test(e.name) ? 'random control plans' : pretty(e.name);
+      stageLive.rounds = `Round ${roundNo} · ${kind}`; renderPipe();
+      narrate('routr', `Round ${roundNo} (${kind}): ${e.plans ? plural(e.plans, 'plan') : 'every plan'} run at the same time, each on its own copy of the board. KiCad judges each one.`);
+    } else if (e.type === 'done' && a) { setStage(runStage === 'load' ? 'rounds' : runStage); }
+  }
+}
+function startGroup(group) {
+  for (const e of group) {
+    const a = agent(e.agent); if (e.step || /^hydrogen-/.test(a.name)) a.tasks.clear();
+    a.tasks.set(e.net || ('plan ' + a.tasks.size), { name: e.net || '', nets: e.nets || [], ripup: e.ripup || [], why: e.why || '', step: e.step, t0: performance.now() });
+    a.thinking = null; renderAgent(a);
+  }
+  focusDirty = true; setStage(fixingNow ? 'fix' : 'rounds');
+  if (group.length === 1) { const e = group[0], a = agents.get(e.agent);
+    const what = e.step ? e.net : [e.ripup?.length ? 'rip up ' + listN(e.ripup) : '', e.nets?.length ? 're-route ' + listN(e.nets) : ''].filter(Boolean).join(', then ');
+    narrate(whoLine(a.name), `${a.name} is trying “${e.step ? 'step ' + e.step : pretty(e.net)}”` + (what && !e.step ? `: ${what}` : e.step ? `: ${e.net}` : '') + (e.why ? ` — “${e.why}”` : ''), a.css);
+  } else { const by = new Map(); for (const e of group) by.set(e.agent, (by.get(e.agent) || 0) + 1);
+    const who = [...by].map(([n, k]) => k > 1 ? `${n} ×${k}` : n).join(', ');
+    const withWhy = group.find(e => e.why), a0 = agents.get(group[0].agent);
+    narrate('routr', `${group.length} plans start at once (${who}). Rings on the board mark the connections each agent is working on.` +
+      (withWhy ? ` ${withWhy.agent}: “${withWhy.why}”` : ''), a0?.css);
+  }
+}
+function attemptGroup(group) {
+  for (const e of group) {
+    const a = agent(e.agent);
+    if (a.tasks.has(e.plan)) a.tasks.delete(e.plan); else a.tasks.clear();
+    a.tries++; a.last = { open: e.open, errors: e.errors, best: !!e.best, clean: !!e.clean }; renderAgent(a); addAttempt(e, a);
+  }
+  focusDirty = true; renderPipe();
+  const best = group.find(e => e.best);
+  if (best) narrate(whoLine(best.agent), `★ New best from ${best.agent} (“${pretty(best.plan)}”): ${resultText(best)}.` +
+    (best.clean ? ' Every connection made, no rule broken.' : ' Its board is now the one on screen.'), agents.get(best.agent).css);
+  else narrate('KiCad rule checker', `KiCad judged ${plural(group.length, 'attempt')}` + (group.length === 1 ? ` from ${group[0].agent}: ${resultText(group[0])}` : '') +
+    '. None beat the best board so far, so the screen keeps it.');
+}
+// rings on the pads of the nets each agent is working on, in its colour
+const focusRingGeo = new THREE.TorusGeometry(1, .13, 6, 26), focusMats = new Map();
+const focusMat = a => { if (!focusMats.has(a.css)) focusMats.set(a.css, new THREE.MeshBasicMaterial({ color: new THREE.Color(a.css), transparent: true, opacity: .9, depthTest: false })); return focusMats.get(a.css); };
+function rebuildFocus() {
+  focusDirty = false; if (!focusGroup) return; focusGroup.clear(); let rings = 0;
+  for (const a of agents.values()) {
+    a.focus = [];
+    const lists = [...a.tasks.values()].map(t => ({ names: [...t.nets, ...t.ripup], label: t.step ? t.name : pretty(t.name) }));
+    if (a.flashNets && a.flashUntil > performance.now()) lists.push({ names: a.flashNets, label: 'in the way: ' + listN(a.flashNets, 2) });
+    for (const L of lists) {
+      let sx = 0, sz = 0, n = 0;
+      for (const nm of L.names) for (const pd of (padsByNet.get(nameToCode[nm]) || []).slice(0, 16)) {
+        const [x, z] = P(pd.x, pd.y); sx += x; sz += z; n++;
+        if (rings++ > 450) continue;
+        const ring = new THREE.Mesh(focusRingGeo, focusMat(a)); ring.rotation.x = Math.PI / 2; ring.renderOrder = 6;
+        ring.position.set(x, pd.side === 'back' ? -T - .3 : .3, z); ring.userData = { r: Math.min(SPAN * .02, Math.max(.55, Math.max(pd.w, pd.h) * .7)), ph: Math.random() * 6 }; focusGroup.add(ring);
+      }
+      if (n) a.focus.push({ x: sx / n, z: sz / n, label: L.label });
+    }
+  }
+}
+setInterval(() => { if (phase !== 'routing') return; for (const a of agents.values()) if (a.thinking || a.tasks.size) renderAgent(a);
+  if ([...agents.values()].some(a => a.flashNets && a.flashUntil < performance.now())) { for (const a of agents.values()) if (a.flashUntil < performance.now()) a.flashNets = null; focusDirty = true; } }, 1000);
 
 // ---------- applying board versions ----------
 async function getHeavy(i) { if (!heavy[i] || heavy[i].open_pairs == null) heavy[i] = await (await fetch('/frame/' + i)).json(); return heavy[i]; }
@@ -425,7 +680,7 @@ function setPhase(p) {
   show('route', p === 'ready'); show('stop', p === 'routing'); show('skip', p === 'assembling');
   $('route').classList.toggle('go', p === 'ready' && !!lastState.can_route && total != null); show('footstats', p === 'routing' || p === 'done');
   show('swarm', p !== 'done'); show('result', p === 'done'); show('newb', p !== 'routing');
-  renderer.domElement.style.visibility = p === 'import' ? 'hidden' : 'visible';
+  renderer.domElement.style.visibility = p === 'import' ? 'hidden' : 'visible'; if (p !== 'routing') show('narr', false);
   const order = ['import', 'assembling', 'routing', 'done'], at = { import: 0, assembling: 1, ready: 1, routing: 2, done: 3 }[p];
   ['s1', 's2', 's3', 's4'].forEach((id, i) => { $(id).className = i < at ? 'done' : i === at ? 'on' : ''; });
   if (p === 'done') $('s4').className = 'on ' + (outcome === 'pass' ? 'pass' : 'need');
@@ -446,8 +701,8 @@ function verdict() {
   const facts = `<div class="rows num"><div><span>Connections</span><b>${total != null ? total - f.open : '–'} of ${total ?? '–'}</b></div>
     <div><span>Rule violations</span><b>${f.violations}</b></div><div><span>Copper</span><b>${Math.round(f.length_mm).toLocaleString()} mm</b></div>
     <div><span>Layer changes</span><b>${f.vias}</b></div><div><span>Agents · time</span><b>${n} · ${secs}</b></div>${lastState.fix_round ? `<div><span>Gemini fix rounds</span><b>${lastState.fix_round}</b></div>` : ''}${lastState.result?.attempts != null ? `<div><span>Attempts</span><b>${esc(lastState.result.attempts)}</b></div>` : ''}</div>` +
-    (lastState.solver_exit ? `<p style="color:var(--bad);margin-top:8px">The solver stopped with an error (exit ${esc(lastState.solver_exit)}).</p>` : '');
-  outcome = f.open === 0 && f.violations === 0 ? 'pass' : 'need';
+    agentSummary() + (lastState.solver_exit ? `<p style="color:var(--bad);margin-top:8px">The solver stopped with an error (exit ${esc(lastState.solver_exit)}).</p>` : '');
+  outcome = f.open === 0 && f.violations === 0 ? 'pass' : 'need'; setStage('verdict');
   if (outcome === 'pass') {
     v.className = 'res pass';
     const fixed = lastState.fix_round ? fixNote() : '';
@@ -503,6 +758,16 @@ function verdict() {
   $('again').onclick = e => startRoute(e.shiftKey ? 3 : 0);
   $('replay').onclick = replay;
 }
+function agentSummary() {                          // the verdict's "who did what", from the same events as the live cards
+  const rows = [...agents.values()].filter(a => a.tries || a.done).map(a => {
+    const mine = attemptsList.filter(x => x.agent === a), sc = x => (x.open ?? 0) + (x.errors ?? 0);
+    const best = mine.reduce((b, y) => (!b || sc(y) < sc(b) ? y : b), null);
+    const won = frames.some(f => f.agent === a.name && f.id > 0);
+    const r = mine.length ? `${plural(mine.length, 'attempt')} · best ${resultText(best)}` : `${a.done} laid`;
+    return `<div><i style="background:${a.css}"></i><b>${esc(a.name)}</b>` +
+      `<span class="r" title="${won ? 'Made at least one board version shown on screen' : ''}">${esc(r)}${won ? ' ★' : ''}</span></div>`; });
+  return rows.length ? `<div class="vsum"><p class="k">What each agent did · ★ made a version you saw</p>${rows.join('')}</div>` : '';
+}
 function fixNote() {                                // what the automatic Gemini fix changed, from the checked versions
   const i = frames.findIndex(f => /^fix\d+_/.test(f.name || '')), before = i > 0 ? frames[i - 1] : null;
   if (!before || !before.checked) return ' Gemini fixed the rule checker’s findings on the spot.';
@@ -521,8 +786,10 @@ async function replay() {
 async function startRoute(leave) {
   const r = await post('/route', JSON.stringify({ leave }), { 'Content-Type': 'application/json' });
   if (!r.ok) { $('footmsg').textContent = r.error; return; }
-  attempt = -1; clearCopper(); frames = frames.slice(0, 1); heavy = heavy.slice(0, 1); applied = 0; routeT0 = performance.now(); outcome = '';
+  attempt = -1; clearCopper(); resetRun(); frames = frames.slice(0, 1); heavy = heavy.slice(0, 1); applied = 0; routeT0 = performance.now(); outcome = '';
   setPhase('routing'); showStats(0);
+  narrate('routr', lastState.dummy ? 'Test data: made-up agents replay a finished routing.'
+    : 'Starting the swarm. First the classic router’s board is opened in KiCad’s engine and measured.');
 }
 $('route').onclick = e => startRoute(e.shiftKey ? 3 : 0);
 $('stop').onclick = () => post('/stop', '{}', { 'Content-Type': 'application/json' });
@@ -541,7 +808,7 @@ async function poll() {
     else if (s.epoch !== epoch) { epoch = s.epoch; attempt = s.attempt; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
     if (s.board && phase !== 'assembling' && phase !== 'import') {
       if (attempt === -1) attempt = s.attempt;
-      else if (s.attempt !== attempt) { attempt = s.attempt; clearCopper(); heavy = heavy.slice(0, 1); applied = 0; outcome = '';
+      else if (s.attempt !== attempt) { attempt = s.attempt; clearCopper(); resetRun(); heavy = heavy.slice(0, 1); applied = 0; outcome = '';
         routeT0 = performance.now(); frames = s.frames; setPhase('routing'); showStats(0); }
       frames = s.frames;
       // KiCad found errors and Gemini is fixing them on the spot: same board, same run, keep the copper
@@ -552,7 +819,7 @@ async function poll() {
       if (phase === 'ready' && frames[0]?.checked && !webShown) { webShown = 1; applied = 0; setWeb((await getHeavy(0)).open_pairs); }
       if (phase === 'ready' && s.route_started && frames.length > 1) { applied = 0; routeT0 = performance.now() - frames[frames.length - 1].t * 1000; setPhase('routing'); }
       if (phase === 'routing') {
-        $('clock').textContent = mmss((performance.now() - routeT0) / 1000); showEvents(s.events);
+        $('clock').textContent = mmss((performance.now() - routeT0) / 1000); ingest(s); showEvents(s.events);
         while (applied < frames.length - 1) { const i = applied + 1; applyVersion(i, await getHeavy(i)); applied = i; }
         if (statsFor >= 0 && statsDrawn !== statsFor && frames[statsFor]?.checked) showStats(statsFor);
         const last = frames[frames.length - 1];
@@ -596,6 +863,26 @@ $('newb').onclick = () => { resetWorld(); lastState = {}; setPhase('import'); };
 $('ghost').onclick = () => setGhost(!ghost);
 $('spin').onclick = e => { controls.autoRotate = !controls.autoRotate; e.target.textContent = controls.autoRotate ? 'Pause spin' : 'Spin'; };
 
+// ---------- an agent with no copper to lay hovers over what it is working on, or above the board while it thinks ----------
+function hover(a, now, dt, working) {
+  const busy = working && (a.thinking || a.tasks.size || (a.flashNets && a.flashUntil > performance.now()));
+  if (!busy) { a.marker.visible = false; a.tip.style.display = 'none'; return; }
+  let tx, tz, label;
+  if (a.focus.length) { const f = a.focus[Math.floor((now + a.idx * .7) / 2.6) % a.focus.length], off = SPAN * .045;   // agents on the same net stand apart
+    tx = f.x + Math.cos(a.idx * 2.4) * off; tz = f.z + Math.sin(a.idx * 2.4) * off; label = f.label; }
+  else { const ang = a.idx * 2.1 + now * .25; tx = Math.cos(ang) * BW * .28; tz = Math.sin(ang) * BH * .28; label = a.thinking ? 'thinking' : 'working'; }
+  if (!a.hpSet) { a.hp.set(tx, 0, tz); a.hpSet = true; }
+  a.hp.lerp(v3.set(tx, 0, tz), Math.min(1, dt * 2.5));
+  const r = Math.max(.7, SPAN * .016), h = SPAN * (.06 + .025 * (a.idx % 3)) + Math.sin(now * 2.2 + a.idx) * SPAN * .008;
+  a.marker.visible = true; a.marker.position.set(a.hp.x, .2, a.hp.z);
+  a.orb.scale.setScalar(r * (1 + .12 * Math.sin(now * 6))); a.orb.position.y = h;
+  a.beam.scale.set(r * 1.6, h, r * 1.6); a.beam.position.y = h / 2;      // a searchlight from the agent down onto its nets
+  const text = a.name + ' · ' + (label.length > 34 ? label.slice(0, 33) + '…' : label);
+  if (a.tip.textContent !== text) a.tip.textContent = text;
+  const [x, y] = toScreen(v3.set(a.hp.x, h + r * 2.2, a.hp.z).applyMatrix4(world.matrixWorld));
+  a.tip.style.display = 'block'; a.tip.style.left = x + 'px'; a.tip.style.top = y + 'px';
+}
+
 // ---------- animation loop ----------
 const clock = new THREE.Clock(), v3 = new THREE.Vector3();
 function tick() {
@@ -605,6 +892,13 @@ function tick() {
   for (const m of bigParts) if (m.userData.to != null) { m.material.opacity += (m.userData.to - m.material.opacity) * Math.min(1, dt * 4);
     m.material.depthWrite = m.material.opacity > .9; m.castShadow = m.material.opacity > .6; }
   if (boardMesh && phase !== 'assembling' && phase !== 'import') { boardMesh.material.opacity += (.62 - boardMesh.material.opacity) * Math.min(1, dt * 3); boardMesh.material.depthWrite = false; }
+  if (phase === 'routing') stepNarration();
+  if (focusDirty) rebuildFocus();
+  const working = phase === 'routing';
+  for (const m of focusGroup?.children || []) { const u = m.userData; m.visible = working; m.scale.setScalar(u.r * (1 + .22 * Math.sin(now * 5 + u.ph))); }
+  const reader = working ? [...agents.values()].find(a => a.thinking) : null;
+  if (scanMesh) { scanMesh.visible = !!reader;
+    if (reader) { const k = (now * .32) % 1; scanMesh.position.z = -BH * .52 + k * BH * 1.04; scanMesh.children.forEach(c => c.material.color.set(reader.css)); } }
   for (const a of agents.values()) {
     if (a.burst.length) {                           // many connections from one version: all drawn together, quickly
       for (const j of a.burst) { j.t += dt / j.dur; const t = Math.min(1, Math.max(0, j.t)); let run = t * j.len;
@@ -615,7 +909,8 @@ function tick() {
         if (!a.burst.length) { say(a, a.done + ' laid · idle'); showStats(idle() ? applied : fr); } }
     }
     if (!a.job && a.queue.length) { a.job = a.queue.shift(); say(a, 'routing ' + (nets[a.job.net] || 'net ' + a.job.net), true); }
-    const j = a.job; if (!j) { a.marker.visible = false; a.tip.style.display = 'none'; continue; }
+    const j = a.job; if (!j) { hover(a, now, dt, working); continue; }
+    if (a.tip.textContent !== a.name) a.tip.textContent = a.name;
     j.t += dt / j.dur; const t = Math.min(1, j.t); let run = t * j.len, tipPos = null;
     for (const o of j.path) { const k = o.len ? Math.min(1, Math.max(0, run / o.len)) : 1; o.set(k); run -= o.len;
       if (k > 0) tipPos = [o.a[0] + (o.b[0] - o.a[0]) * k, o.y, o.a[1] + (o.b[1] - o.a[1]) * k]; }
@@ -625,7 +920,7 @@ function tick() {
       a.orb.scale.setScalar(r * (1 + .15 * Math.sin(now * 9))); a.orb.position.y = up * r * 1.4;
       a.beam.scale.set(r * 1.1, r * 3.2, r * 1.1); a.beam.position.y = up * r * 3.0;
       const [x, y] = toScreen(v3.set(tipPos[0], tipPos[1] + up * r * 5, tipPos[2]).applyMatrix4(world.matrixWorld));
-      a.tip.style.display = 'block'; a.tip.style.left = x + 'px'; a.tip.style.top = y + 'px'; }
+      a.tip.style.display = 'block'; a.tip.style.left = x + 'px'; a.tip.style.top = y + 'px'; a.hp.set(tipPos[0], 0, tipPos[2]); a.hpSet = true; }
     if (t >= 1) { for (const o of [...j.path, ...j.vias]) settle.push({ m: o.m, to: new THREE.Color(COPPER[o.side] ?? COPPER.front), t: 0 });
       a.done++; say(a, a.done + ' laid · idle'); log(frames[j.frame]?.t ?? 0, `${a.name} connected ${nets[j.net] || 'net ' + j.net}`); a.job = null;
       if (!a.queue.some(q => q.frame === j.frame)) showStats(idle() ? applied : j.frame); }

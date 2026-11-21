@@ -430,6 +430,8 @@ def repair_board(board_id: str, start: Path, a) -> dict:
     out_dir = OUT / a.run_id / board_id
     out_dir.mkdir(parents=True, exist_ok=True)
     live = Live(OUT / a.run_id / "live" / board_id)
+    live.event("phase", name="load", text="Opening the classic router's board in KiCad's engine and measuring "
+                                          "what it left unfinished")
     f = board_files(board_id)
     eng = Engine()
     try:
@@ -453,9 +455,19 @@ def repair_board(board_id: str, start: Path, a) -> dict:
                                            "clean_pass": base_score.get("clean_pass")}}
     attempts = 0
     triage = {}
+    names = nets.get("names", {})
+
+    def net_names(codes, cap=8) -> list:
+        return [names.get(str(n), str(n)) for n in (codes or [])][:cap]
+
+    def think(agent: str, text: str = "") -> None:      # a model is working (text) or has finished ("")
+        live.event("think", agent=agent, text=text)
     (out_dir / "blockers.json").write_text(json.dumps(block, indent=1))
     if not base_score.get("clean_pass"):
         if not a.no_llm:
+            live.event("phase", name="screen", text="Gemini's Decisions API looks at a picture of the board and "
+                                                    "rates which tracks are in the way of each open connection")
+            think("decision-1", "reading the board picture: which tracks block each open connection?")
             try:
                 triage = decisions_blockers(board_id, block, img, out_dir)
                 (out_dir / "triage.json").write_text(json.dumps(triage, indent=1))
@@ -465,12 +477,15 @@ def repair_board(board_id: str, start: Path, a) -> dict:
                         f"{n} ({p:.0%})" for p, n in top))
             except Exception as e:
                 print(f"  [{board_id}] decisions screen failed: {str(e)[:140]}", flush=True)
+            think("decision-1")
         via_order = {}
         if not a.no_llm and not a.no_vision:
+            think("decision-1", "ranking where a stuck connection could change layers (via sites), from the picture")
             try:
                 via_order = vision_via_order(board_id, start, st, out_dir)
             except Exception as e:
                 print(f"  [{board_id}] vision via-site step failed: {str(e)[:140]}", flush=True)
+            think("decision-1")
         rounds = [("scripted", [] if a.skip_scripted else scripted_plans(st))]
         open_now = [x["net"] for x in st["open_nets"]]
         if via_order:       # same repair, but the router tries via sites in the order the vision model ranked them
@@ -506,13 +521,19 @@ def repair_board(board_id: str, start: Path, a) -> dict:
                     except Exception as e:
                         print(f"  [{board_id}] carbon plan failed: {str(e)[:100]}", flush=True)
                     carbon_fut = None
+                live.event("phase", name="plan", text="Gemini agents read the board picture and every attempt so far, "
+                                                      "then write new repair plans")
                 if carbon_fut is None:
+                    think("carbon", "writing 2 careful repair plans (slower; joins the next round when ready)")
                     carbon_fut = carbon_pool.submit(llm_plans, board_id, st, nets, img, list(history), 2, PLANNER,
                                                     "medium", out_dir, triage)
+                think("hydrogen", f"writing {a.workers} repair plans from the picture and the {len(history)} "
+                                  f"attempt(s) so far")
                 try:
                     plans += llm_plans(board_id, st, nets, img, history, a.workers, WORKER, "medium", out_dir, triage)
                 except Exception as e:
                     print(f"  [{board_id}] hydrogen plans failed: {str(e)[:120]}", flush=True)
+                think("hydrogen")
                 if carbon_fut.done():
                     try:
                         plans += carbon_fut.result()
@@ -528,9 +549,15 @@ def repair_board(board_id: str, start: Path, a) -> dict:
             plans = plans[: a.max_attempts - attempts]
             if not plans:
                 continue
-            live.event("round", n=len([h for h in history if h.get("tag", "").endswith("_0")]) + 1, name=name)
+            live.event("round", n=len([h for h in history if h.get("tag", "").endswith("_0")]) + 1, name=name,
+                       plans=len(plans))
             for p_ in plans:
-                live.event("start", agent=agent_name({"plan": p_}), net=p_.get("name", ""))
+                ag = agent_name({"plan": p_})
+                if ag == "carbon":
+                    think("carbon")
+                live.event("start", agent=ag, net=p_.get("name", ""), nets=net_names(p_.get("order")),
+                           ripup=net_names(p_.get("ripup")), mode=p_.get("mode"), vias=bool(p_.get("vias")),
+                           why=str(p_.get("why", ""))[:200])
             with ThreadPoolExecutor(a.parallel) as ex:
                 recs = list(ex.map(lambda ip: execute(board_id, start, ip[1], out_dir, f"{name}_{ip[0]}"),
                                    enumerate(plans)))
@@ -550,6 +577,8 @@ def repair_board(board_id: str, start: Path, a) -> dict:
                 print(f"  [{board_id}] {r['tag']:14s} {r['plan'].get('name', '')[:34]:34s} "
                       f"open={r.get('end_status', {}).get('unrouted')} err={r.get('end_status', {}).get('drc_errors')} "
                       f"clean={s.get('clean_pass')} {r.get('seconds')}s {r.get('error', '')[:80]}", flush=True)
+        if not a.no_llm:
+            think("carbon")
     ok = [h for h in history if h.get("ok")]
     best = sorted(ok, key=rank_key)[0]
     final = OUT / a.run_id / "submitted" / f"{board_id}.kicad_pcb"

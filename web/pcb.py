@@ -371,8 +371,6 @@ def section() -> str:
   <div class="wrap">
     <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--lilac)"></span>Live</div><h2>Route a board yourself</h2></div></div>
     {studio()}
-    <h3 style="margin:48px 0 16px">What still fails</h3>
-    {limits(rows, t)}
   </div>
 </section>"""
 

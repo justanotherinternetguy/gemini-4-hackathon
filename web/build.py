@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from web import analog, council, pcb, simple
-from web.kit import OUT
+from web.kit import OUT, studio_gif
 
 HERE = Path(__file__).resolve().parent
 FONTS = ("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Figtree:wght@400;600"
@@ -25,12 +25,14 @@ MOON = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width
 def hero(p: dict, a: dict) -> str:
     return f"""
 <header class="hero" id="top">
-  <div class="wrap">
+  <div class="wrap split"><div class="herotext">
     <div class="eyebrow"><span class="dot" style="background:var(--sky)"></span>Gemini 4 hackathon · 5 Sigma track</div>
     <h1>Agents that finish the <em>hardware</em> design.</h1>
     <p class="lede">routr puts teams of Gemini 4 agents on the two jobs that stall chip and board work: routing the last connections on a circuit board, and sizing an analog circuit until it passes at every corner. Every result here is scored by an independent checker against a published or standard baseline.</p>
     <div class="cta"><a class="btn main" href="#pcb">PCB routing</a><a class="btn paper" href="#analog">Analog sizing</a>
       <a class="btn lilac" href="#pcb-studio">Try it live</a></div>
+  </div>{studio_gif()}</div>
+  <div class="wrap">
     <div class="kpis">
       <div class="kpi ok"><b>{p["ours"]}<small>/10</small></b><span>hard PCBWorld boards routed clean. Best published: 4/10</span></div>
       <div class="kpi"><b>4<small>/10</small></b><span>PCBRouteAgent, the published LLM routing agent</span></div>

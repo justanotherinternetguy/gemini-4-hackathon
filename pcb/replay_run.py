@@ -45,22 +45,24 @@ def main() -> None:
                 pass
     events.sort(key=lambda e: e.get("t", 0))
 
+    # one timeline: each event is written at its own time, so the viewer can show what the agents were doing
+    # between board versions (not only in a burst when the next version lands)
+    timeline = sorted([(e.get("t", 0), 0, e) for e in events] + [(t, 1, name) for t, name in versions],
+                      key=lambda x: (x[0], x[1]))
     clock = 0.0
-    for t, name in versions:
-        wait = min(args.max_wait, max(0.05, (t - clock) / max(args.speed, 0.01)))
-        time.sleep(wait)
-        clock = t
-        with open(out / "events.jsonl", "a") as fh:      # events up to this moment, in step
-            while events and events[0].get("t", 0) <= t:
-                fh.write(json.dumps(events.pop(0)) + "\n")
-        if (src / name).is_file():
-            tmp = out / (name + ".tmp")
-            shutil.copyfile(src / name, tmp)
-            tmp.rename(out / name)                       # appear all at once, never half-written
-            print(f"{t:7.1f}s  {name}", flush=True)
-    with open(out / "events.jsonl", "a") as fh:
-        for e in events:
-            fh.write(json.dumps(e) + "\n")
+    for t, kind, item in timeline:
+        wait = min(args.max_wait, max(0.0, (t - clock) / max(args.speed, 0.01)))
+        if wait > 0:
+            time.sleep(wait)
+        clock = max(clock, t)
+        if kind == 0:
+            with open(out / "events.jsonl", "a") as fh:
+                fh.write(json.dumps(item) + "\n")
+        elif (src / item).is_file():
+            tmp = out / (item + ".tmp")
+            shutil.copyfile(src / item, tmp)
+            tmp.rename(out / item)                       # appear all at once, never half-written
+            print(f"{t:7.1f}s  {item}", flush=True)
     if (src / "result.json").is_file():
         shutil.copyfile(src / "result.json", out / "result.json")
 

@@ -182,3 +182,15 @@ def switch(group: str, items: list[tuple[str, str]], dot_colors: list[str] | Non
 
 def pane(group: str, pid: str, body: str, first: bool) -> str:
     return f'<div class="pane{" on" if first else ""}" data-group="{group}" data-id="{pid}">{body}</div>'
+
+
+def studio_gif() -> str:
+    """The studio routing a real board, start to finish (web/shots/studio_route.gif), for the top of both pages."""
+    src = asset(ROOT / "web" / "shots" / "studio_route.gif", "shots/studio_route.gif")
+    if not src:
+        return ""
+    return (f'<figure class="shot herogif"><img src="{src}" alt="The routr studio routing a circuit board: the classic '
+            f'router lays copper, Gemini screens what blocks the last connection, repair plans run, and KiCad marks it ready to manufacture">'
+            f'<figcaption>A real run in the studio, 1.5\u00d7 speed. The classic router leaves one open connection '
+            f'and one rule error. Gemini\u2019s Decisions API reads a picture of the board and names what is in the way, '
+            f'six repair plans run in parallel, and KiCad\u2019s rule checker passes the board.</figcaption></figure>')
