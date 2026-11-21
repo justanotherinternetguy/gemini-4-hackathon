@@ -26,7 +26,7 @@ def span(live: Path) -> float:
     return max(ts, default=t0) - t0
 
 
-def render(x: dict, seconds: float) -> str:
+def render(x: dict, seconds: float, fps: int = 30) -> str:
     run = RUNS / x["agent_run"] / "live" / x["board"]
     ctl = RUNS / x["random_run"] / "live" / x["board"]
     has_ctl = ctl.is_dir() and any(ctl.glob("0000__*.kicad_pcb"))
@@ -34,7 +34,7 @@ def render(x: dict, seconds: float) -> str:
     speed = max(1.0, round(length / seconds, 1))
     out = OUT / f"{x['board']}.mp4"
     cmd = [sys.executable, "-m", "pcb.make_video", "--run", str(run), "--out", str(out), "--speed", str(speed),
-           "--poster", "--title", f"{short(x['board'])}: Gemini 4 step agents vs a random policy"]
+           "--poster", "--fps", str(fps), "--title", f"{short(x['board'])}: Gemini 4 step agents vs a random policy"]
     if has_ctl:
         cmd += ["--control", str(ctl)]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
@@ -44,13 +44,14 @@ def render(x: dict, seconds: float) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seconds", type=float, default=24.0, help="target length of each video")
+    ap.add_argument("--fps", type=int, default=30, help="frames rendered per second; 10-15 renders 2-3x faster")
     ap.add_argument("--boards", nargs="*", help="only these boards (default: the featured ones)")
     a = ap.parse_args()
     pick = json.loads((ROOT / "runs" / "site" / "pick.json").read_text())
     todo = [x for x in pick["ranking"] if x["board"] in a.boards] if a.boards else pick["featured"]
     OUT.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(len(todo) or 1) as ex:
-        for msg in ex.map(lambda x: render(x, a.seconds), todo):
+        for msg in ex.map(lambda x: render(x, a.seconds, a.fps), todo):
             print(msg, flush=True)
 
 

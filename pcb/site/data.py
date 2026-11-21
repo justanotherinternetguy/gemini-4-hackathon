@@ -34,7 +34,10 @@ def _jsonl(p: Path) -> list:
 def short(board: str) -> str:
     """0400_laptimer58_Chickadee -> 'Chickadee (0400)'."""
     num, _, rest = board.partition("_")
-    name = rest.split("_")[-1] if rest else board
+    parts = rest.split("_") if rest else [board]
+    name = parts[-1]
+    if len(parts) > 1 and len(name) < 6:      # 'tnc' -> 'bt-tnc', 'CPLD' -> 'RGBMatrixPanel CPLD'
+        name = parts[-2] if parts[-2].lower().endswith(name.lower()) else f"{parts[-2]} {name}"
     return f"{name} ({num})"
 
 
@@ -58,7 +61,8 @@ def load_side(run_id: str, board: str) -> dict | None:
             "seconds": r.get("seconds"), "ok": r.get("ok", True),
             "steps": [{k: s.get(k) for k in ("action", "nets", "mode", "before", "after", "err_after", "detail",
                                              "thought")} for s in steps],
-            "traj": [s_open] + [s.get("after") for s in steps],
+            "traj": [s_open] + [s.get("after") if s.get("after") is not None else s.get("before") or s_open
+                                for s in steps],
         })
     ok = [a for a in agents if a["ok"] and a["open"] is not None]
     best = min(ok, key=lambda a: (not a["clean"], a["open"], a["errors"] or 0, a["n_steps"] or 0), default=None)

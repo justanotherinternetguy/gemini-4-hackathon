@@ -276,6 +276,7 @@ def render(args) -> None:
         return xs, ys
 
     intro, outro = 1.5, 3.0
+    FPS = args.fps                            # frames rendered per video second (the MP4 is always 30 fps)
     run_len = (end_t - t_start) / args.speed
     total = intro + run_len + outro
     nframes = int(total * FPS)
@@ -333,7 +334,7 @@ def render(args) -> None:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", str(tmp / "f%05d.png"),
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(out)], check=True)
+                    "-vf", "fps=30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", str(out)], check=True)
     if args.poster:
         shutil.copy(tmp / f"f{nframes - 1:05d}.png", out.with_suffix(".png"))
     shutil.rmtree(tmp, ignore_errors=True)
@@ -348,6 +349,7 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--speed", type=float, default=6.0, help="run seconds per video second")
     ap.add_argument("--title")
+    ap.add_argument("--fps", type=int, default=30, help="frames rendered per video second (lower = faster render)")
     ap.add_argument("--poster", action="store_true", help="also save the last frame as a PNG")
     render(ap.parse_args())
 
