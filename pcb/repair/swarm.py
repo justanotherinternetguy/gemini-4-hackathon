@@ -89,6 +89,43 @@ class Engine:
             pass
 
 
+class Live:
+    """Publishes a run in the solver/viewer contract (pcb/CONTRACT.md): whole-board versions named
+    <seq>__<agent>.kicad_pcb in the watched folder, plus events.jsonl and result.json."""
+
+    def __init__(self, folder: Path):
+        self.dir = folder
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.t0 = time.time()
+        self.seq = 0
+        self.lock = threading.Lock()
+
+    def event(self, type: str, **kw) -> None:
+        with self.lock, open(self.dir / "events.jsonl", "a") as f:
+            f.write(json.dumps({"t": round(time.time() - self.t0, 2), "type": type, **kw}, default=str) + "\n")
+
+    def publish(self, board_file: str | Path, agent: str) -> str:
+        """Atomic copy of a complete board as the next version, credited to `agent`."""
+        with self.lock:
+            name = f"{self.seq:04d}__{agent}.kicad_pcb"
+            self.seq += 1
+        tmp = self.dir / (name + ".tmp")
+        shutil.copy(board_file, tmp)
+        os.replace(tmp, self.dir / name)
+        return name
+
+    def result(self, claimed_clean: bool, attempts: int, left: list) -> None:
+        (self.dir / "result.json").write_text(json.dumps(
+            {"claimed_clean": bool(claimed_clean), "attempts": attempts, "left": left}, indent=1))
+
+
+def agent_name(rec: dict) -> str:
+    """Who gets credit for an attempt in the viewer: the model that wrote the plan, else the script."""
+    by = str((rec.get("plan") or {}).get("by") or "script")
+    by = by.replace("gemini-4-", "").replace("gemini-", "").split(" ")[0]
+    return "".join(ch for ch in by if ch.isalnum() or ch == "-") or "script"
+
+
 def board_files(board_id: str) -> dict:
     d = SORTED / board_id
     return {"unrouted": d / f"{STEM}_unrouted.kicad_pcb", "pro": d / f"{STEM}.kicad_pro"}
@@ -101,8 +138,10 @@ def scripted_plans(st: dict) -> list[dict]:
     open_nets = [n["net"] for n in st["open_nets"]]
     err_nets = sorted({int(k) for k in (st.get("errors_per_net") or {}) if str(k).lstrip("-").isdigit()})
     plans = [
-        {"name": "finish-open-walkaround", "ripup": [], "order": open_nets, "mode": 2},
-        {"name": "finish-open-shove", "ripup": [], "order": open_nets, "mode": 1},
+        {"name": "finish-open-walkaround", "ripup": [], "order": open_nets, "mode": 2, "vias": False},
+        {"name": "finish-open-shove", "ripup": [], "order": open_nets, "mode": 1, "vias": False},
+        {"name": "finish-open-then-vias", "ripup": [], "order": open_nets, "mode": 2, "vias": True},
+        {"name": "finish-open-then-vias-shove", "ripup": [], "order": open_nets, "mode": 1, "vias": True},
     ]
     if err_nets:
         plans.append({"name": "rip-error-nets", "ripup": err_nets, "order": err_nets + open_nets, "mode": 2})
@@ -171,6 +210,60 @@ def decisions_blockers(board_id: str, block: dict, image: Path, log_dir: Path) -
     return out
 
 
+def vision_via_order(board_id: str, start: Path, st: dict, out_dir: Path, max_nets: int = 6) -> dict:
+    """VISION STEP. For each open connection, draw the candidate via sites as numbered dots on a
+    zoomed picture of the board and ask the Decisions API which one is the best place to change
+    layers. Its probabilities over the numbered sites become the ORDER in which the router tries
+    them. Returns {net: [site indices best-first]} and logs the pictures and probabilities."""
+    f = board_files(board_id)
+    eng = Engine()
+    scout = {}
+    try:
+        eng.call("open", board=str(start), project=str(f["pro"]))
+        pics = []
+        for item in st["open_nets"][:max_nets]:
+            r = eng.call("render_sites", net=item["net"], path=str(out_dir / f"sites_net{item['net']}.png"))
+            if r.get("image") and r.get("sites"):
+                pics.append(r)
+    finally:
+        eng.close()
+    if not pics:
+        return {}
+    c = _client()
+    order = {}
+    for r in pics:
+        opts = {f"s{i}": f"marker {i} at ({s_['x']:.1f}, {s_['y']:.1f}) mm" for i, s_ in enumerate(r["sites"])}
+        t0 = time.time()
+        try:
+            res = c.decisions.create(model=DECIDER, input=[
+                {"type": "text", "text":
+                 "Close-up of a two-layer printed circuit board. Red lines are copper tracks on the TOP layer, blue "
+                 "lines are copper tracks on the BOTTOM layer, dark squares are pads, white circles are existing "
+                 "vias. The dashed orange line is a connection that still has to be made between the green stars "
+                 "A and B; it is blocked on its own layer. Yellow numbered dots are candidate places to drill a "
+                 "via (a plated hole that moves the route to the other layer)."},
+                {"type": "image", "mime_type": "image/png", "resolution": "high",
+                 "data": base64.b64encode(Path(r["image"]).read_bytes()).decode()}],
+                questions={"site": {"type": "choice", "instructions":
+                           "Which numbered marker is the best place for a via on this connection? A good site has "
+                           "NO track of either colour and no pad or via under or touching it, and has clear space "
+                           "on the other layer to continue toward A or B.", "criteria": opts}})
+            a = res.answers["site"]
+            probs = dict(a.probabilities) if isinstance(a.probabilities, dict) else {}
+            ranked = sorted(range(len(r["sites"])), key=lambda i: -float(probs.get(f"s{i}", 0.0)))
+            order[str(r["net"])] = ranked
+            scout[str(r["net"])] = {"name": r["name"], "image": Path(r["image"]).name, "choice": a.choice,
+                                    "top": [(i, round(float(probs.get(f"s{i}", 0.0)), 3)) for i in ranked[:8]],
+                                    "latency_s": round(time.time() - t0, 2)}
+        except Exception as e:
+            scout[str(r["net"])] = {"error": str(e)[:200]}
+    (out_dir / "via_scout.json").write_text(json.dumps(scout, indent=1))
+    with open(out_dir / "llm_calls.jsonl", "a") as fh:
+        fh.write(json.dumps({"board": board_id, "model": DECIDER, "step": "vision via-site ranking",
+                             "nets": len(pics), "scout": scout}) + "\n")
+    return order
+
+
 def execute(board_id: str, start: Path, plan: dict, out_dir: Path, tag: str) -> dict:
     """Run one repair attempt in its own engine process; returns the judge's score."""
     f = board_files(board_id)
@@ -199,6 +292,15 @@ def execute(board_id: str, start: Path, plan: dict, out_dir: Path, tag: str) -> 
         for item in st["open_nets"]:
             r = eng.call("route", net=item["net"], mode=1 if plan.get("mode", 2) == 2 else 2)
             log.append(r)
+        # layer changes: for anything STILL open, search via sites (kept only if the rule check stays clean)
+        if plan.get("vias", True):
+            st = eng.call("status", detail=False)
+            for item in st["open_nets"][:8]:
+                r = eng.call("route_via", net=item["net"], mode=int(plan.get("mode", 2)),
+                             order=(plan.get("via_order") or {}).get(str(item["net"])),
+                             max_trials=int(plan.get("via_trials", 120)), timeout=500)
+                r["via"] = True
+                log.append(r)
         out = out_dir / f"{board_id}__{tag}.kicad_pcb"
         eng.call("save", path=str(out))
         st1 = eng.call("status", detail=False)
@@ -312,6 +414,7 @@ plan that already failed). Use net CODES (integers)."""
                             "plans": out.get("plans")}) + "\n")
     valid = {int(k) for k in nets["names"]}
     plans = []
+    out["_model"] = model
     for p in out.get("plans", [])[:n_plans]:
         p["ripup"] = [int(n) for n in p.get("ripup", []) if int(n) in valid]
         p["order"] = [int(n) for n in p.get("order", []) if int(n) in valid]
@@ -326,8 +429,7 @@ plan that already failed). Use net CODES (integers)."""
 def repair_board(board_id: str, start: Path, a) -> dict:
     out_dir = OUT / a.run_id / board_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    live = OUT / a.run_id / "live" / board_id
-    live.mkdir(parents=True, exist_ok=True)
+    live = Live(OUT / a.run_id / "live" / board_id)
     f = board_files(board_id)
     eng = Engine()
     try:
@@ -341,6 +443,9 @@ def repair_board(board_id: str, start: Path, a) -> dict:
         base_score = eng.call("score", path=str(s0), project=str(f["pro"]))
     finally:
         eng.close()
+    live.publish(s0, "router")                 # contract: the classic router's board comes first
+    live.event("note", agent="router", text=f"classic router left {st['unrouted']} open connection(s) and "
+                                            f"{st['drc_errors']} rule error(s)")
     history: list[dict] = [{"board": board_id, "tag": "start", "plan": {"name": "start (classic router output)"},
                             "end_status": {k: st[k] for k in ("unrouted", "drc_errors", "clean")},
                             "score": base_score, "saved": str(s0), "ok": True}]
@@ -354,9 +459,28 @@ def repair_board(board_id: str, start: Path, a) -> dict:
             try:
                 triage = decisions_blockers(board_id, block, img, out_dir)
                 (out_dir / "triage.json").write_text(json.dumps(triage, indent=1))
+                top = sorted(((b_["p_blocks"], b_["name"]) for bl in triage.values() for b_ in bl), reverse=True)[:3]
+                if top:
+                    live.event("note", agent="decision-1", text="blocker screen: " + ", ".join(
+                        f"{n} ({p:.0%})" for p, n in top))
             except Exception as e:
                 print(f"  [{board_id}] decisions screen failed: {str(e)[:140]}", flush=True)
+        via_order = {}
+        if not a.no_llm and not a.no_vision:
+            try:
+                via_order = vision_via_order(board_id, start, st, out_dir)
+            except Exception as e:
+                print(f"  [{board_id}] vision via-site step failed: {str(e)[:140]}", flush=True)
         rounds = [("scripted", [] if a.skip_scripted else scripted_plans(st))]
+        open_now = [x["net"] for x in st["open_nets"]]
+        if via_order:       # same repair, but the router tries via sites in the order the vision model ranked them
+            rounds[0][1].append({"name": "vias-vision-ranked", "ripup": [], "order": open_now, "mode": 2,
+                                 "vias": True, "via_order": via_order, "by": DECIDER + " (vision)"})
+        if a.no_llm:        # control for the vision step: a random site order
+            import random as _r
+            rng = _r.Random(a.seed)
+            rounds[0][1].append({"name": "vias-random-order", "ripup": [], "order": open_now, "mode": 2, "vias": True,
+                                 "via_order": {str(n): rng.sample(range(36), 36) for n in open_now}, "by": "random"})
         if triage:      # rip the nets the screen is most sure about
             sure = sorted({b["blocker"] for bl in triage.values() for b in bl if b["p_blocks"] >= 0.6})
             open_nets = [x["net"] for x in st["open_nets"]]
@@ -395,6 +519,8 @@ def repair_board(board_id: str, start: Path, a) -> dict:
                     except Exception as e:
                         print(f"  [{board_id}] carbon plan failed: {str(e)[:100]}", flush=True)
                     carbon_fut = None
+                for p_ in plans:             # agent plans inherit the vision-ranked via sites
+                    p_.setdefault("via_order", via_order)
                 seen = {json.dumps([h["plan"].get("ripup"), h["plan"].get("order"), h["plan"].get("mode")])
                         for h in history}
                 plans = [p for p in plans
@@ -402,19 +528,28 @@ def repair_board(board_id: str, start: Path, a) -> dict:
             plans = plans[: a.max_attempts - attempts]
             if not plans:
                 continue
+            live.event("round", n=len([h for h in history if h.get("tag", "").endswith("_0")]) + 1, name=name)
+            for p_ in plans:
+                live.event("start", agent=agent_name({"plan": p_}), net=p_.get("name", ""))
             with ThreadPoolExecutor(a.parallel) as ex:
                 recs = list(ex.map(lambda ip: execute(board_id, start, ip[1], out_dir, f"{name}_{ip[0]}"),
                                    enumerate(plans)))
             for r in recs:
                 attempts += 1
+                prev_best = sorted([h for h in history if h.get("ok")], key=rank_key)[0]
                 history.append(r)
+                is_best = bool(r.get("ok")) and rank_key(r) < rank_key(prev_best)
+                if is_best and r.get("saved"):
+                    live.publish(r["saved"], agent_name(r))
+                live.event("attempt", agent=agent_name(r), plan=r["plan"].get("name", ""),
+                           open=r.get("end_status", {}).get("unrouted"),
+                           errors=r.get("end_status", {}).get("drc_errors"),
+                           clean=bool((r.get("score") or {}).get("clean_pass")), seconds=r.get("seconds"),
+                           best=is_best, why=str(r["plan"].get("why", ""))[:200])
                 s = r.get("score") or {}
                 print(f"  [{board_id}] {r['tag']:14s} {r['plan'].get('name', '')[:34]:34s} "
                       f"open={r.get('end_status', {}).get('unrouted')} err={r.get('end_status', {}).get('drc_errors')} "
                       f"clean={s.get('clean_pass')} {r.get('seconds')}s {r.get('error', '')[:80]}", flush=True)
-            best = sorted([h for h in history if h.get("ok")], key=rank_key)[0]
-            if best.get("saved"):
-                shutil.copy(best["saved"], live / f"{int(time.time())}_{best['tag']}.kicad_pcb")
     ok = [h for h in history if h.get("ok")]
     best = sorted(ok, key=rank_key)[0]
     final = OUT / a.run_id / "submitted" / f"{board_id}.kicad_pcb"
@@ -430,7 +565,15 @@ def repair_board(board_id: str, start: Path, a) -> dict:
         e2.close()
     except Exception as e:
         print(f"  [{board_id}] final render failed: {str(e)[:100]}", flush=True)
-    result.update(attempts=attempts, best_tag=best["tag"], best_plan=best["plan"],
+    left = []
+    try:
+        for r_ in (best.get("route_log") or []):
+            if r_.get("open_left"):
+                left.append({"net": r_.get("name") or str(r_.get("net"))})
+    except Exception:
+        pass
+    live.result(bool((best.get("score") or {}).get("clean_pass")), attempts, left)
+    result.update(attempts=attempts, best_tag=best["tag"], best_plan=best["plan"], best_agent=agent_name(best),
                   final=best.get("score"), submitted=str(final))
     (out_dir / "history.json").write_text(json.dumps(history, indent=1, default=str))
     return result
@@ -450,6 +593,7 @@ def main() -> None:
     ap.add_argument("--boards-parallel", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--skip-scripted", action="store_true", help="testing: go straight to the agents")
+    ap.add_argument("--no-vision", action="store_true", help="ablation: no vision ranking of via sites")
     a = ap.parse_args()
     ids_file = DATA / "subset_work" / "ids.json"
     ids = json.loads(ids_file.read_text()) if ids_file.exists() else {}

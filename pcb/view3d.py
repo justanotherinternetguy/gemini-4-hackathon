@@ -41,6 +41,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -118,7 +119,8 @@ class Studio:
         self.tmp = Path(tempfile.mkdtemp(prefix="pcb3d_"))
         self.pool = ThreadPoolExecutor(max_workers=4)
         self.lock = threading.RLock()
-        self.epoch = 0                    # bumps when a board is loaded
+        self.epoch = int(time.time()) % 10**9   # bumps when a board is loaded; never repeats after a restart,
+                                                # so a page left open on the old server rebuilds its board
         self.attempt = 0                  # bumps on every Route
         self.board: dict | None = None
         self.scene: dict | None = None
@@ -161,6 +163,9 @@ class Studio:
             return self._featured
         boards = self.list_boards()
         pick = [b for b in boards if b["router_failed"]][:5] + [b for b in boards[20:99:9] if not b["router_failed"]][:4]
+        if len(pick) < 9:                      # a small boards folder: the slices above find few or none
+            rest = [b for b in boards if b not in pick]
+            pick += rest[::max(1, len(rest) // (9 - len(pick)))][:9 - len(pick)]
         out = []
         for b in pick:
             try:
@@ -197,7 +202,14 @@ class Studio:
     def stop_route(self) -> None:
         """Stop the solver but keep what it saved; the verdict then reports where it got to."""
         with self.lock:
-            if self.proc and self.proc.poll() is None:
+            self._kill()
+
+    def _kill(self) -> None:
+        """Stop the solver and everything it started (its engine processes would otherwise keep running)."""
+        if self.proc and self.proc.poll() is None:
+            try:
+                os.killpg(self.proc.pid, signal.SIGTERM)       # the solver runs in its own process group
+            except (OSError, AttributeError):
                 self.proc.terminate()
 
     def load_benchmark(self, name: str) -> None:
@@ -258,13 +270,12 @@ class Studio:
             self.events, self.result, self.seen, self.events_pos = [], None, {}, 0
             self.route_started, self.route_seconds, self.solver_exit, self.recorded = time.time(), None, None, None
             self.proc = subprocess.Popen(cmd, shell=True, cwd=str(self.cwd), stdout=subprocess.DEVNULL,
-                                         stderr=subprocess.DEVNULL)
+                                         stderr=subprocess.DEVNULL, start_new_session=True)
         print(f"[route] {cmd}\n[watch] {self.watch}", flush=True)
         return ""
 
     def stop(self) -> None:
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
+        self._kill()
         self.proc = None
 
     # ----- watching -----

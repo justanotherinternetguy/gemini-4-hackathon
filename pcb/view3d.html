@@ -300,7 +300,7 @@ function eventLine(e) {
     case 'note': return who + (e.text || '');
     case 'round': return 'round ' + (e.n ?? '');
     case 'start': return who + 'started ' + (e.net || '');
-    case 'attempt': return who + `attempt: ${e.open ?? '?'} open, ${e.errors ?? '?'} errors` + (e.best ? '  ← best so far' : '');
+    case 'attempt': return (e.best ? '★ ' : '') + who + `${e.open ?? '?'} open, ${e.errors ?? '?'} errors` + (e.plan ? ' · ' + e.plan : '');
     case 'done': return who + 'connected ' + (e.net || '');
     case 'fail': return who + 'gave up on ' + (e.net || '') + (e.reason ? ': ' + e.reason : '');
     default: return who + (e.type || '') + (e.net ? ' ' + e.net : '');
@@ -309,7 +309,7 @@ function eventLine(e) {
 function showEvents(evs) {
   if (!evs || evs.length === solverEvents) return; solverEvents = evs.length;
   $('log').innerHTML = '';
-  for (const e of evs.slice(-10)) { const row = document.createElement('div'); row.textContent = mmss(e.t || 0) + '  ' + eventLine(e);
+  for (const e of evs.slice(-10)) { const row = document.createElement('div'); row.textContent = mmss(e.t || 0) + '  ' + eventLine(e); row.title = row.textContent;
     if (e.type === 'attempt' && e.best) row.style.color = 'var(--good)'; if (e.type === 'fail') row.style.color = 'var(--bad)'; $('log').prepend(row); }
 }
 function log(t, text) { if (solverEvents) return; const row = document.createElement('div'); row.textContent = mmss(t) + '  ' + text; $('log').prepend(row); while ($('log').children.length > 9) $('log').lastChild.remove(); }
