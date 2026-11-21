@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from pcb.site.data import load_pairs, short
+from web import council
 from web.kit import (E, RUNS, asset, chip, hbars, jload, key, line_chart, pane, switch, table)
 
 PCB = RUNS / "pcb"
@@ -36,6 +37,7 @@ def tier(rows: list[dict]) -> dict:
     scripted = {r["board"] for r in ctl if (r.get("final") or {}).get("clean_pass")} - start
     agents = {r["board"] for r in rows if r.get("finished") and r.get("hard_test") and r["agent"]["best_clean"]}
     agents -= start | scripted
+    council_clean = council.clean_boards() - start - scripted - agents
     spec = jload(PCB / "hard_specialist_final" / "MANIFEST.json", {}) or {}
     spec_clean = {b for b, v in (spec.get("boards") or {}).items() if v.get("clean_pass")}
     rnd = {r["board"] for r in rows if r.get("finished") and r.get("hard_test") and r.get("random")
@@ -43,9 +45,10 @@ def tier(rows: list[dict]) -> dict:
     status = {}
     for b in HARD:
         status[b] = ("base" if b in start else "script" if b in scripted else "agent" if b in agents
+                     else "council" if b in council_clean
                      else "empty")
     return {"start": start, "scripted": scripted, "agents": agents, "spec_clean": spec_clean,
-            "random_clean": rnd, "status": status, "ours": len(start) + len(scripted) + len(agents)}
+            "random_clean": rnd, "status": status, "council": council_clean, "ours": len(start) + len(scripted) + len(agents) + len(council_clean)}
 
 
 # ------------------------------------------------------------------ pieces
@@ -62,20 +65,23 @@ def ranking(t: dict) -> str:
         rows.append(f'<div class="rrow"><div class="who"><b>{name}</b><span>{sub}</span></div>'
                     f'<div class="sqs">{sq([(None, "base")] * n)}</div><div class="n">{n}<small>/10</small></div></div>')
     order = [(b, "base") for b in HARD if b in t["start"]] + [(b, "script") for b in HARD if b in t["scripted"]] + \
-            [(b, "agent") for b in HARD if b in t["agents"]]
-    rows.append(f'<div class="rrow ours"><div class="who"><b>routr</b><span>router + repair + Gemini 4 agents</span></div>'
+            [(b, "agent") for b in HARD if b in t["agents"]] + [(b, "council") for b in HARD if b in t["council"]]
+    rows.append(f'<div class="rrow ours"><div class="who"><b>routr</b><span>router + repair + Gemini 4 agents + council</span></div>'
                 f'<div class="sqs">{sq(order)}</div><div class="n">{t["ours"]}<small>/10</small></div></div>')
     legend = (f'<div class="legend"><span><i style="background:var(--text-soft)"></i>classic router alone ({len(t["start"])})</span>'
               f'<span><i style="background:var(--sky)"></i>+ our scripted repair, no model (+{len(t["scripted"])})</span>'
               f'<span><i style="background:var(--mint)"></i>+ Gemini 4 step agents (+{len(t["agents"])}'
-              f'{": " + E(", ".join(short(b) for b in t["agents"])) if t["agents"] else ""})</span></div>')
+              f'{": " + E(", ".join(short(b) for b in t["agents"])) if t["agents"] else ""})</span>'
+              f'<span><i style="background:var(--lilac)"></i>+ Gemini council (+{len(t["council"])}'
+              f'{": " + E(", ".join(short(b) for b in t["council"])) if t["council"] else ""})</span></div>')
     return f'<div class="rank" data-inview>{"".join(rows)}</div>{legend}'
 
 
 def tier_table(t: dict, rows: list[dict]) -> str:
     by = {r["board"]: r for r in rows if r.get("finished")}
     label = {"base": '<span class="dim">classic router</span>', "script": "scripted repair",
-             "agent": '<span class="ok-t">Gemini step agents</span>', "empty": '<span class="warn-t">not clean yet</span>'}
+             "agent": '<span class="ok-t">Gemini step agents</span>',
+             "council": '<span class="ok-t">Gemini council</span>', "empty": '<span class="warn-t">not clean yet</span>'}
     out = []
     for b in HARD:
         s = t["status"][b]
@@ -84,6 +90,9 @@ def tier_table(t: dict, rows: list[dict]) -> str:
             extra.append(chip("Managed Agent: clean", "ok"))
         if b in t["random_clean"]:
             extra.append(chip("random control: clean", ""))
+        cc = council.load(council.AGENT_RUN, b)
+        if cc and cc["final"] and b not in t["council"]:
+            extra.append(chip(f'council: {cc["final"]} open', "open"))
         r = by.get(b)
         if r and not r["agent"]["best_clean"]:
             extra.append(chip(f'agents: {r["agent"]["start_open"]} → {r["agent"]["best_open"]} open', "open"))
@@ -235,48 +244,52 @@ def control_table(rows: list[dict]) -> tuple[str, str]:
 
 
 def scoreboard() -> str:
+    """Every method on the hard boards nothing had fixed, all scored by PCBWorld's evaluate_one."""
     sb = jload(PCB / "scoreboard" / "scoreboard.json")
-    sp = jload(PCB / "scoreboard_specialist" / "scoreboard.json") or {}
     if not sb:
         return ""
-    step = {}
-    for r in load_pairs(["hard_step_agent:hard_step_random"]):
-        if r.get("finished"):
-            a = r["agent"]
-            b = next((x for x in a["agents"] if x["agent"] == a["best_agent"]), None)
-            step[r["board"]] = ({"clean_pass": b["clean"], "routability": b["routability"], "drv_errors_only_count": b["drv"]}
-                                if b else None)
-    methods = [("freerouting", "Freerouting", sb), ("scripted", "Scripted repair", sb),
-               ("whole-plan-agents", "Whole-plan agents", sb), ("specialist", "Managed Agent specialist", sp),
-               ("step", "Gemini step agents", None)]
+    sp = jload(PCB / "scoreboard_specialist" / "scoreboard.json") or {}
+    labels = {"freerouting": "Freerouting", "scripted": "Scripted", "whole-plan-agents": "Whole-plan agents",
+              "random-steps": "Random steps", "gemini-steps": "Gemini step agents",
+              "specialist": "Managed Agent"}
+    methods = list(sb["methods"])
+    if "specialist" not in methods and sp:
+        methods.append("specialist")
+    ours = {"gemini-steps", "council"}
 
-    def cell(v, hl=False):
-        c = ' hl' if hl else ''
+    def cell(v, m):
+        c = " hl" if m in ours else ""
         if not v or v.get("routability") is None:
             return f'<td class="n dim{c}">no board</td>'
         if v.get("clean_pass"):
             return f'<td class="n{c}"><span class="ok-t">clean pass</span></td>'
-        return f'<td class="n{c}">{v["routability"] * 100:.1f}%<span class="dim"> · {v.get("drv_errors_only_count", "?")} err</span></td>'
+        return f'<td class="n{c}">{v["routability"] * 100:.1f}%<span class="dim"> · {v.get("drv_errors_only_count", "?")}</span></td>'
 
-    trs, clean = [], {m: 0 for m, _, _ in methods}
+    trs, clean = [], {m: 0 for m in methods + ["council"]}
     for b in sb["boards"]:
         row = [f"<b>{E(short(b))}</b>"]
-        for m, _, src in methods:
-            if m == "step":
-                v = step.get(b, "pending")
-                if v == "pending":
-                    row.append('<td class="n dim hl">running</td>'); continue
-            else:
-                v = ((src or {}).get("scores", {}).get(m) or {}).get(b) if src else None
-                if src is sp and b not in (sp.get("boards") or []):
+        for m in methods:
+            v = (sb["scores"].get(m) or {}).get(b)
+            if v is None and m == "specialist":
+                if b not in (sp.get("boards") or []):
                     row.append('<td class="n dim">not run</td>'); continue
+                v = ((sp.get("scores") or {}).get("specialist") or {}).get(b)
             clean[m] += bool(v and v.get("clean_pass"))
-            row.append(cell(v, m == "step"))
+            row.append(cell(v, m))
+        cc = council.load(council.AGENT_RUN, b)
+        sbc = (((jload(PCB / f"scoreboard_{b[:4]}" / "scoreboard.json") or {}).get("scores") or {}).get("council") or {}).get(b)
+        if sbc:
+            clean["council"] += bool(sbc.get("clean_pass"))
+            row.append(cell(sbc, "council"))
+        elif cc:
+            row.append(f'<td class="n hl">{cc["final"]} open<span class="dim"> · unscored</span></td>')
+        else:
+            row.append('<td class="n dim hl">not run</td>')
         trs.append(row)
     n = len(sb["boards"])
-    trs.append(["clean boards"] + [f'<td class="n{" hl" if m == "step" else ""}">{clean[m]} of {n}</td>' for m, _, _ in methods])
-    return table(["Board"] + [lab for _, lab, _ in methods], trs).replace("<tr><td>clean boards", '<tr class="tot"><td>clean boards')
-
+    trs.append(["clean boards"] + [f'<td class="n{" hl" if m in ours else ""}">{clean[m]} of {n}</td>' for m in methods + ["council"]])
+    return table(["Board"] + [labels.get(m, m) for m in methods] + ["Gemini council"], trs).replace(
+        "<tr><td>clean boards", '<tr class="tot"><td>clean boards')
 
 def limits(rows: list[dict], t: dict) -> str:
     fin = [r for r in rows if r.get("finished") and r["agent"]["start_open"]]
@@ -285,7 +298,8 @@ def limits(rows: list[dict], t: dict) -> str:
     if fails:
         li.append(("fail", "<b>Still not clean after the step agents:</b> " + E(", ".join(
             f'{short(r["board"])} ({r["agent"]["start_open"]} → {r["agent"]["best_open"]} open)' for r in fails))
-            + ". One open connection fails the whole board."))
+            + ". One open connection fails the whole board."
+            + (" The council later brought " + E(", ".join(short(b) for b in t["council"])) + " to a clean pass." if t["council"] else "")))
         w = max(fails, key=lambda r: r["agent"]["best_open"])
         ba = next((x for x in w["agent"]["agents"] if x["agent"] == w["agent"]["best_agent"]), None) or \
             min(w["agent"]["agents"], key=lambda x: x["open"] or 99, default=None)
@@ -298,7 +312,7 @@ def limits(rows: list[dict], t: dict) -> str:
                    + ". On that board the step loop and KiCad's router are enough on their own; the agents needed fewer steps."))
     li.append(("", "<b>Freerouting does most of the routing</b> (about 97% of each board). The agents finish the last few connections."))
     li.append(("", f'<b>{len(t["start"]) + len(t["scripted"])} of our {t["ours"]} clean boards need no model</b>: the router and the scripted repair. '
-                   f'The step agents added {len(t["agents"])}.'))
+                   f'The step agents added {len(t["agents"])} and the council {len(t["council"])}.'))
     li.append(("", "<b>One run per arm.</b> No repeated seeds, so no error bars. Every saved board is scored with PCBWorld's evaluate_one."))
     return '<ul class="limits">' + "".join(f'<li class="{c}">{x}</li>' for c, x in li) + "</ul>"
 
@@ -306,7 +320,7 @@ def limits(rows: list[dict], t: dict) -> str:
 def studio() -> str:
     return """
 <div class="card">
-  <div class="chead"><div><h3>routr studio</h3><p class="soft" style="margin:4px 0 0">Shaurya's live viewer: pick a board, press Route, watch the solver's versions arrive and KiCad's rule check judge each one. Replays play recorded runs at their original pace.</p></div>
+  <div class="chead"><div><h3>routr studio</h3><p class="soft" style="margin:4px 0 0">Pick a board, press Route, and watch the solver's versions arrive while KiCad's rule check judges each one. For any connection the agents could not make, click it: Gemini 4 Neon looks at a close-up and says why it is stuck and the most practical fix, and the Decisions API gives a calibrated chance that moving one track would fix it. Replays play recorded runs at their original pace.</p></div>
     <div class="chips"><a class="btn lilac" href="http://127.0.0.1:8766/" target="_blank" rel="noopener">Open the studio</a></div></div>
   <figure class="frame live" data-live="http://127.0.0.1:8766/" style="background:var(--sunk);min-height:120px">
     <div class="soft livehint" style="padding:28px;text-align:center">The studio is not running. Start it with <code>web/serve.sh</code> (or <code>pcb/run_studio.sh 8766</code>) and reload this page.</div>
@@ -348,11 +362,12 @@ def section() -> str:
       <h2>Did the agents matter?</h2><p class="lede">Same actions, same step budget, random choices. Scored by PCBWorld's evaluate_one.</p></div></div>
     {kp}{tb}
     <h3 style="margin:48px 0 8px">The hard boards nothing had fixed, every method, one scorer</h3>
-    <p class="soft">Cell = share of connections routed · error-level rule violations left.</p>
+    <p class="soft">Cell = share of connections routed · error-level rule violations left. All scored by PCBWorld's evaluate_one, except where a council run has not been scored yet.</p>
     {scoreboard()}
   </div>
 </section>
-<section class="band" id="pcb-studio">
+{council.section()}
+<section class="band alt" id="pcb-studio">
   <div class="wrap">
     <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--lilac)"></span>Live</div><h2>Route a board yourself</h2></div></div>
     {studio()}

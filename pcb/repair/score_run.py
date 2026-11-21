@@ -77,8 +77,10 @@ def main() -> None:
         lines.append(f"| {b[:34]} | " + " | ".join(cells) + " |")
     lines.append("| **clean boards** | " + " | ".join(
         str(sum(bool(table[m][b].get("clean_pass")) for b in a.boards)) + f" of {len(a.boards)}" for m, _ in methods) + " |")
-    lines.append("| **mean routability** | " + " | ".join(
-        f"{100 * sum((table[m][b].get('routability') or 0) for b in a.boards) / len(a.boards):.1f}%" for m, _ in methods) + " |")
+    def mean_routed(m):          # only over boards the method actually submitted
+        vals = [table[m][b]["routability"] for b in a.boards if table[m][b].get("routability") is not None]
+        return f"{100 * sum(vals) / len(vals):.1f}% (of {len(vals)})" if vals else "n/a"
+    lines.append("| **mean routability** | " + " | ".join(mean_routed(m) for m, _ in methods) + " |")
     md = "\n".join(lines)
     (a.out / "scoreboard.md").write_text(md + "\n")
     print(md)

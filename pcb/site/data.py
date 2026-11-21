@@ -57,7 +57,7 @@ def load_side(run_id: str, board: str) -> dict | None:
             "agent": r.get("agent") or r.get("tag"), "policy": r.get("policy"),
             "open": es.get("unrouted"), "errors": es.get("drc_errors"),
             "clean": bool(sc.get("clean_pass")), "routability": sc.get("routability"),
-            "drv": sc.get("drv_errors_only_count"), "n_steps": r.get("n_steps", len(steps)),
+            "drv": sc.get("drv_errors_only_count"), "score_full": sc, "n_steps": r.get("n_steps", len(steps)),
             "seconds": r.get("seconds"), "ok": r.get("ok", True),
             "steps": [{k: s.get(k) for k in ("action", "nets", "mode", "before", "after", "err_after", "detail",
                                              "thought")} for s in steps],
@@ -73,6 +73,20 @@ def load_side(run_id: str, board: str) -> dict | None:
         best_open, best_clean, best_name = best["open"], best["clean"], best["agent"]
         if best_open > s_open and not best_clean:
             best_open, best_name = s_open, "router"
+    final = (best or {}).get("score_full") or start_sc
+    # the run's own summary says which board was kept and how PCBWorld scored it; prefer that
+    res = next((x for x in (_json(RUNS / run_id / "summary.json", {}) or {}).get("results", [])
+                if x.get("board") == board), None)
+    if res and res.get("final"):
+        final = res["final"]
+        best_name = res.get("best_agent") or best_name
+        best_clean = bool(final.get("clean_pass"))
+        rec = next((a for a in agents if a["agent"] == best_name), None)
+        best_open = rec["open"] if rec and rec["open"] is not None else s_open
+    # fewest steps (and seconds) any agent needed to end at the kept result
+    same = [a for a in ok if a["open"] == best_open and a["clean"] == best_clean] if best_name != "router" else []
+    best_steps = min([a["n_steps"] for a in same if a["n_steps"]], default=None)
+    best_seconds = min([a["seconds"] for a in same if a["seconds"]], default=None)
     calls = _jsonl(d / "llm_calls.jsonl")
     dec = [c for c in calls if c.get("decision")]
     lead = next((c for c in calls if c.get("agent") == "lead" and c.get("note")), None)
@@ -80,7 +94,7 @@ def load_side(run_id: str, board: str) -> dict | None:
         "run": run_id, "board": board, "dir": str(d), "live": str(RUNS / run_id / "live" / board),
         "start_open": s_open, "start_errors": (start.get("end_status") or {}).get("drc_errors"),
         "start_score": start_sc, "agents": agents, "best_agent": best_name, "best_open": best_open,
-        "best_clean": best_clean, "best_score": (best or {}).get("routability"),
+        "best_clean": best_clean, "final": final, "best_steps": best_steps, "best_seconds": best_seconds,
         "steps_total": sum(a["n_steps"] or 0 for a in agents),
         "seconds": max([a["seconds"] or 0 for a in agents], default=0),
         "llm_calls": len(dec) + (1 if lead else 0), "tokens": sum(c.get("tokens") or 0 for c in calls),

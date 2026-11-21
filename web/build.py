@@ -11,7 +11,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from web import analog, pcb
+from web import analog, council, pcb
 from web.kit import OUT
 
 HERE = Path(__file__).resolve().parent
@@ -52,7 +52,7 @@ def page() -> str:
 </head><body>
 <nav class="top"><div class="wrap">
   <a class="brand" href="#top"><i></i><span>routr</span></a>
-  <div class="tabs"><a href="#pcb">PCB routing</a><a href="#analog">Analog sizing</a><a href="#pcb-studio">Live</a></div>
+  <div class="tabs"><a href="#pcb">PCB routing</a><a href="#pcb-council">Council</a><a href="#analog">Analog sizing</a><a href="#pcb-studio">Live</a></div>
   <button class="themebtn" aria-label="Switch light or dark theme">{MOON}</button>
 </div></nav>
 {hero(p, a)}

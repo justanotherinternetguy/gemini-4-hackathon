@@ -126,6 +126,7 @@ section.band.alt{background:var(--raised)}
 .sq{aspect-ratio:1/1;max-height:52px;border-radius:12px;background:var(--sunk);border:1px dashed var(--line);position:relative}
 .sq.base{background:var(--text-soft);border:0}
 .sq.script{background:var(--sky);border:0}
+.sq.council{background:var(--lilac);border:0;box-shadow:0 0 0 2px var(--cream),0 0 0 3.5px #1e1b2ecc}
 .sq.agent{background:var(--mint);border:0;box-shadow:0 0 0 2px var(--cream),0 0 0 3.5px #1e1b2ecc}
 .sq[title]{cursor:help}
 .inview .sq:not(.empty){animation:pop .5s cubic-bezier(.34,1.56,.64,1) both}
@@ -247,3 +248,11 @@ details.more[open] summary:before{content:"−"}
 footer{padding:48px 0 64px;color:var(--text-soft);font-size:14px}
 footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+
+/* council rounds */
+details.round{background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card);padding:14px 18px;margin-bottom:12px}
+.band.alt details.round{background:var(--ground)}
+details.round summary{cursor:pointer;list-style:none;display:flex;gap:12px;align-items:center;min-height:32px;font:600 18px/1 var(--display)}
+details.round summary:before{content:"+";font-family:var(--mono);width:16px}
+details.round[open] summary:before{content:"−"}
+details.round summary .soft{font:400 14px var(--body)}

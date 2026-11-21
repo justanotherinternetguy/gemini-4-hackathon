@@ -215,6 +215,11 @@ def render(args) -> None:
     gap, left, top_h = 0.02, 0.035, 0.47
     pw = (1 - 2 * left - gap * (n - 1)) / n
     ph = min(top_h, pw * 1920 / 1080 * 1.6)   # panels fill the band between the header and the captions
+    pts = [pt for o in run["versions"][0]["open"] for pt in (o["a"], o["b"])]
+    if pts:                                   # ...unless the open connections need a wider, shorter view
+        nw = max(q[0] for q in pts) - min(q[0] for q in pts) + 18.0
+        nh = max(q[1] for q in pts) - min(q[1] for q in pts) + 18.0
+        ph = min(top_h, max(0.30, pw * 1920 / (nw / nh) / 1080))
     aspect = (pw * 1920) / (ph * 1080)
     box = zoom_box(run, aspect=aspect)
     y0 = 0.835 - ph
@@ -238,7 +243,7 @@ def render(args) -> None:
     clock = fig.text(1 - left, 0.955, "", color=INK2, fontsize=16, ha="right", va="center", family="monospace")
 
     # chart: open connections over run time, per agent (+ control best)
-    cax = fig.add_axes([left + 0.02, 0.07, 1 - 2 * left - 0.04, 0.14])
+    cax = fig.add_axes([left + 0.02, 0.07, 1 - 2 * left - 0.04, max(0.14, y0 - 0.225)])   # the chart takes what is left
     cax.set_facecolor(BG)
     for s in ("top", "right"):
         cax.spines[s].set_visible(False)

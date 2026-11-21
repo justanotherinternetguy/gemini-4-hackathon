@@ -53,6 +53,50 @@ def img_uri(p: Path) -> str:
     return "data:image/png;base64," + base64.b64encode(data).decode()
 
 
+def zoom_stills(row: dict) -> tuple[str, str] | None:
+    """Before and after pictures drawn like the video panels: zoomed on what the router left open."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        from pcb import make_video as mv
+        from pcb.board_parse import copper, scene
+        from pcb.connectivity import open_connections
+        ag, board = row["agent"], row["board"]
+        d = Path(ag["dir"])
+        before = d / f"{board}__start.kicad_pcb"
+        after = RUNS / row["agent_run"] / "submitted" / f"{board}.kicad_pcb"
+        if not (before.is_file() and after.is_file()):
+            return None
+        out_dir = SITE / "img"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        sc = scene(before)
+        vs = []
+        for f in (before, after):
+            cu = copper(f)
+            vs.append({"copper": cu, "open": open_connections(sc, cu)})
+        run = {"scene": sc, "versions": vs}
+        w, h = 10.8, 4.76
+        box = mv.zoom_box(run, margin=7.0, aspect=w / h)
+        uris = []
+        for name, v in zip(("before", "after"), vs):
+            out = out_dir / f"{board}_{name}.png"
+            fig = plt.figure(figsize=(w, h), dpi=100, facecolor=mv.PANEL)
+            pn = mv.Panel(fig, [0, 0, 1, 1], run, name, box, "", mv.PANEL)
+            pn.scale = 1080 / (box[2] - box[0])
+            pn.set_version(v, -99)
+            pn.air.set_alpha(1.0)
+            pn.air.set_linewidths(3.2)
+            fig.savefig(out, facecolor=mv.PANEL)
+            plt.close(fig)
+            uris.append("data:image/png;base64," + base64.b64encode(out.read_bytes()).decode())
+        return uris[0], uris[1]
+    except Exception as e:  # fall back to the run's own pictures
+        print("zoom stills failed:", e)
+        return None
+
+
 def md_inline(s: str) -> str:
     """Lead notes use **bold** and `code`; render those two, escape the rest."""
     s = E(s)
@@ -97,7 +141,6 @@ def slide_hook(tc: dict) -> str:
         ("Freerouting", "classic autorouter", [(PUBLISHED["freerouting"], "base")], PUBLISHED["freerouting"], ""),
         ("PCBRouteAgent", "Claude Opus 5.5, published", [(PUBLISHED["pcbrouteagent"], "base")], PUBLISHED["pcbrouteagent"], ""),
         ("Ours", "router + repair + Gemini 4 step agents", [(s, "base"), (sc, "script"), (ag, "agent")], ours, "ours"),
-        ("Human engineers", "published", [(PUBLISHED["humans"], "human")], PUBLISHED["humans"], ""),
     ]
     bars = "".join(
         f'<div class="brow {cls}"><div class="bl"><b>{E(n)}</b><span>{E(sub)}</span></div>'
@@ -261,13 +304,11 @@ def slide_board(row: dict, idx: int) -> str:
     ag, rnd, board = row["agent"], row["random"], row["board"]
     d = Path(ag["dir"])
     tag = "hard-tier test board" if row["hard_test"] else "development board"
-    best = next((a for a in ag["agents"] if a["agent"] == ag["best_agent"]), None)
     chips = [f'<span class="chip {"ok" if ag["best_clean"] else "part"}">Gemini agents: {E(result_line(ag))}'
-             + (f' in {best["n_steps"]} steps' if best and ag["best_clean"] else "") + "</span>"]
+             + (f' in {ag["best_steps"]} steps' if ag["best_steps"] and ag["best_clean"] else "") + "</span>"]
     if rnd:
-        rb = next((a for a in rnd["agents"] if a["agent"] == rnd["best_agent"]), None)
         chips.append(f'<span class="chip rnd">random control: {E(result_line(rnd))}'
-                     + (f' in {rb["n_steps"]} steps' if rb and rnd["best_clean"] else "") + "</span>")
+                     + (f' in {rnd["best_steps"]} steps' if rnd["best_steps"] and rnd["best_clean"] else "") + "</span>")
     else:
         chips.append('<span class="chip rnd">random control: not finished</span>')
     legend = "".join(f'<span style="color:{color(a["agent"])}">● {E(a["agent"])} <b>{a["traj"][-1]}</b></span>'
@@ -278,6 +319,9 @@ def slide_board(row: dict, idx: int) -> str:
     has_vid = (SITE / vid).is_file()
     video = (f'<video src="{vid}" poster="video/{board}.png" controls muted loop playsinline preload="auto"></video>'
              if has_vid else '<div class="novid">video not rendered yet: run pcb.site.videos</div>')
+    stills = zoom_stills(row)
+    pic_cls = "zoomed" if stills else "plain"
+    pic_a, pic_b = stills or (img_uri(d / "start.png"), img_uri(d / "final.png"))
     note = ag.get("lead_note")
     lead = (f'<div class="leadnote"><div class="who"><b>Lead</b><span class="model">{E(ag.get("lead_model") or "gemini-4-carbon")}'
             f'</span><span class="stepn">strategy note from the board picture</span></div><div class="th">{md_inline(note)}</div></div>'
@@ -289,9 +333,9 @@ def slide_board(row: dict, idx: int) -> str:
   <div class="bgrid">
     <div class="bleft">
       <div class="vidbox">{video}</div>
-      <div class="pics">
-        <figure><img src="{img_uri(d / "start.png")}" alt="before"><figcaption>before · classic router · {ag["start_open"]} open</figcaption></figure>
-        <figure><img src="{img_uri(d / "final.png")}" alt="after"><figcaption>after · {E(ag["best_agent"])} agent · {ag["best_open"]} open</figcaption></figure>
+      <div class="pics {pic_cls}">
+        <figure><img src="{pic_a}" alt="before"><figcaption>before · classic router · {ag["start_open"]} open</figcaption></figure>
+        <figure><img src="{pic_b}" alt="after"><figcaption>after · {E(ag["best_agent"] + " agent" if ag["best_agent"] != "router" else "no agent improved it")} · {ag["best_open"]} open</figcaption></figure>
       </div>
     </div>
     <div class="bright">
@@ -318,24 +362,22 @@ def slide_matter(rows: list[dict]) -> str:
         a, c = r["agent"], r["random"]
         if a["start_open"] == 0:
             continue
-        ba = next((x for x in a["agents"] if x["agent"] == a["best_agent"]), None)
         tot["n"] += 1
         tot["a_clean"] += a["best_clean"]
         tot["open"] += a["start_open"]
         tot["a_closed"] += a["start_open"] - a["best_open"]
 
-        def cell(side, bx):
+        def cell(side):
             end = '<span class="okc">0 · clean</span>' if side["best_clean"] else f'{side["best_open"]} open'
-            return (f'<td class="num">{end}</td><td class="num">{bx["n_steps"] if bx else "–"}'
-                    f'<small> / {side["steps_total"]}</small></td><td class="num">{fmt_s(bx["seconds"] if bx else None)}</td>')
-        row = f'<tr><td>{name}</td><td class="num">{a["start_open"]}</td>' + cell(a, ba)
+            return (f'<td class="num">{end}</td><td class="num">{side["best_steps"] or "–"}'
+                    f'<small> / {side["steps_total"]}</small></td><td class="num">{fmt_s(side["best_seconds"])}</td>')
+        row = f'<tr><td>{name}</td><td class="num">{a["start_open"]}</td>' + cell(a)
         row += f'<td class="num">{a["llm_calls"]}</td><td class="num">{a["tokens"] / 1000:.0f}k</td>'
         if c:
-            bc = next((x for x in c["agents"] if x["agent"] == c["best_agent"]), None)
             tot["r_n"] += 1
             tot["r_clean"] += c["best_clean"]
             tot["r_closed"] += c["start_open"] - c["best_open"]
-            row += cell(c, bc).replace('<td class="num">', '<td class="num rc">')
+            row += cell(c).replace('<td class="num">', '<td class="num rc">')
         else:
             row += '<td class="num rc" colspan="3">control not finished</td>'
         trs.append(row + "</tr>")
@@ -354,7 +396,7 @@ def slide_matter(rows: list[dict]) -> str:
         <th class="gr">end</th><th class="gr">steps <small>best / all</small></th><th class="gr">time</th></tr></thead>
     <tbody>{"".join(trs)}</tbody>
   </table>
-  <p class="foot">Steps and time are for the agent whose board was kept; "all" counts every agent on that board. Scored by PCBWorld's evaluate_one. One run per arm.</p>
+  <p class="foot">Steps and time: the fastest agent that reached the kept result ("–" = nothing beat the router's board); "all" counts every agent on that board. Scored by PCBWorld's evaluate_one. One run per arm.</p>
 </section>"""
 
 
@@ -363,52 +405,45 @@ def slide_scoreboard(rows: list[dict]) -> str:
     if not sb:
         return ""
     by = {r["board"]: r for r in rows if r.get("finished")}
-    labels = {"freerouting": "Freerouting", "scripted": "scripted repair", "whole-plan-agents": "whole-plan agents"}
+    labels = {"freerouting": "Freerouting", "scripted": "scripted repair", "whole-plan-agents": "whole-plan agents",
+              "gemini-steps": "Gemini 4 step agents", "random-steps": "random steps (control)",
+              "specialist": "Managed Agent specialist"}
     methods = list(sb["methods"])
+    cols = [(m, labels.get(m, m), "hl" if m == "gemini-steps" else "rc" if "random" in m else "",
+             lambda b, m=m: (sb["scores"].get(m) or {}).get(b)) for m in methods]
+    if not any("step" in m for m in methods):      # older scoreboard: add the step arms from the run folders
+        cols.append(("step", "Gemini 4 step agents", "hl", lambda b: by[b]["agent"]["final"] if b in by else None))
+        cols.append(("rand", "random steps (control)", "rc",
+                     lambda b: by[b]["random"]["final"] if b in by and by[b]["random"] else None))
 
-    def cell(v):
+    def cell(v, cls):
         if not v or v.get("routability") is None:
-            return '<td class="num dim">no board</td>'
+            return f'<td class="num dim {cls}">no board</td>'
         if v.get("clean_pass"):
-            return '<td class="num"><span class="okc">clean pass</span></td>'
-        return f'<td class="num">{v["routability"] * 100:.1f}%<small> · {v.get("drv_errors_only_count", "?")} err</small></td>'
+            return f'<td class="num {cls}"><span class="okc">clean pass</span></td>'
+        return (f'<td class="num {cls}">{v["routability"] * 100:.1f}%<small> · '
+                f'{v.get("drv_errors_only_count", "?")} err</small></td>')
 
-    def side_score(side):
-        if not side:
-            return None
-        b = next((x for x in side["agents"] if x["agent"] == side["best_agent"]), None)
-        if b is None:
-            return {"clean_pass": False, "routability": side["start_score"].get("routability"),
-                    "drv_errors_only_count": side["start_score"].get("drv_errors_only_count")}
-        return {"clean_pass": b["clean"], "routability": b["routability"], "drv_errors_only_count": b["drv"]}
-
-    trs, clean = [], {m: 0 for m in methods + ["step", "rand"]}
+    trs, clean = [], {c[0]: 0 for c in cols}
     for b in sb["boards"]:
         tds = ""
-        for m in methods:
-            v = (sb["scores"].get(m) or {}).get(b)
-            clean[m] += bool(v and v.get("clean_pass"))
-            tds += cell(v)
-        r = by.get(b)
-        sa, sr = side_score(r["agent"]) if r else None, side_score(r["random"]) if r else None
-        clean["step"] += bool(sa and sa["clean_pass"])
-        clean["rand"] += bool(sr and sr["clean_pass"])
-        tds += (cell(sa) if r else '<td class="num dim">running</td>').replace('class="num', 'class="num hl')
-        tds += (cell(sr) if sr else '<td class="num dim">running</td>').replace('class="num', 'class="num rc')
-        trs.append(f"<tr><td><b>{E(short(b))}</b></td>{tds}</tr>")
+        for key, _, cls, get in cols:
+            v = get(b)
+            clean[key] += bool(v and v.get("clean_pass"))
+            tds += cell(v, cls)
+        trs.append(f'<tr><td class="bname"><b>{E(short(b))}</b></td>{tds}</tr>')
     n = len(sb["boards"])
-    tot = "".join(f'<td class="num"><b>{clean[m]}</b> of {n}</td>' for m in methods)
-    tot += f'<td class="num hl"><b>{clean["step"]}</b> of {n}</td><td class="num rc"><b>{clean["rand"]}</b> of {n}</td>'
-    ths = "".join(f"<th>{E(labels.get(m, m))}</th>" for m in methods)
+    tot = "".join(f'<td class="num {cls}"><b>{clean[key]}</b> of {n}</td>' for key, _, cls, _ in cols)
+    ths = "".join(f'<th class="{"ga" if cls == "hl" else "gr" if cls == "rc" else ""}">{E(lab)}</th>' for _, lab, cls, _ in cols)
     return f"""
 <section class="slide" data-title="Scoring table">
   <div class="kicker">The four hard-tier boards nothing had fixed · scorer: {E(sb.get("scorer", "evaluate_one"))}</div>
   <h2>Same boards, every method, one scorer.</h2>
   <table class="tbl big">
-    <thead><tr><th>Board</th>{ths}<th class="ga">Gemini 4 step agents</th><th class="gr">random steps (control)</th></tr></thead>
+    <thead><tr><th>Board</th>{ths}</tr></thead>
     <tbody>{"".join(trs)}<tr class="total"><td>clean boards</td>{tot}</tr></tbody>
   </table>
-  <p class="foot">Cell = share of connections routed · design-rule errors left. "No board" = that method returned nothing for the board.</p>
+  <p class="foot">Cell = share of connections routed · design-rule errors left. "No board" = that method returned nothing for the board. From runs/pcb/scoreboard/scoreboard.json.</p>
 </section>"""
 
 
@@ -439,6 +474,11 @@ def slide_limits(rows: list[dict], tc: dict) -> str:
     li.append(f'<b>{tc["start"] + len(tc["scripted_added"])} of 10 came from the scripted repair</b>, no model. '
               f'Whole-plan agents added {tc["whole_plan_added"]} board(s). Step agents added {len(tc["agents_added"])}'
               + (f' ({E(", ".join(short(b) for b in tc["agents_added"]))})' if tc["agents_added"] else "") + ".")
+    sb = _json(RUNS / "scoreboard" / "scoreboard.json", {}) or {}
+    spec = [b for b, v in ((sb.get("scores") or {}).get("specialist") or {}).items() if v and v.get("clean_pass")]
+    if spec:
+        li.append("<b>The Managed Agent specialist</b> (one long-running agent per stuck board) also reached a clean pass on "
+                  + E(", ".join(short(b) for b in spec)) + ", and no other board.")
     li.append("<b>Single run per arm.</b> No repeated seeds, so no error bars. Every saved board is scored with PCBWorld's evaluate_one.")
     if pend:
         li.append("<b>Not finished when this page was built:</b> " + E(", ".join(short(r["board"]) for r in pend)) + ".")
@@ -459,6 +499,9 @@ def cards(rows: list[dict], tc: dict, feat: list[dict]) -> list[str]:
   <div class="kicker">PCBWorld hard tier · Gemini 4 hackathon</div>
   <h1>A circuit board with one unconnected wire is <em>scrap</em>.</h1>
   <p class="lede big">A classic router gets 97% of the way. Gemini 4 agents finish the board, one checked step at a time.</p>
+  <div class="crewline"><span><b>gemini-4-carbon</b> lead reads the board picture</span>
+    <span><b>gemini-4-hydrogen</b> ×4 step agents, one action at a time</span>
+    <span><b>KiCad</b> router and rule checker judge every step</span></div>
 </section>"""
     picks = []
     for r in feat:
@@ -487,7 +530,7 @@ def cards(rows: list[dict], tc: dict, feat: list[dict]) -> list[str]:
 <section class="slide card" data-title="result">
   <div class="kicker">Result · scored by PCBWorld's evaluate_one · single run</div>
   <h1><em>{ours}</em> of 10 hard boards pass clean.</h1>
-  <p class="lede big">Freerouting 3 · PCBRouteAgent 4 · ours {ours} · human engineers 9</p>
+  <p class="lede big">Freerouting 3 · PCBRouteAgent 4 · ours {ours}</p>
   <div class="rls">{"".join(lines)}</div>
   <p class="foot">{tc["start"] + len(tc["scripted_added"])} of ours come from the scripted repair (no model); step agents added {len(tc["agents_added"])}. gemini-4-carbon lead · gemini-4-hydrogen step agents · KiCad router and rule checker.</p>
 </section>"""
@@ -556,7 +599,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;color:#cfe
 .novid{display:flex;align-items:center;justify-content:center;height:100%;color:var(--ink2)}
 .pics{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
 .pics figure{margin:0;height:238px;background:#000;border:1px solid var(--line);border-radius:12px;position:relative;overflow:hidden}
-.pics img{width:100%;height:100%;object-fit:contain;display:block;filter:invert(1) hue-rotate(180deg) contrast(1.15)}
+.pics img{width:100%;height:100%;object-fit:cover;display:block}
+.pics.plain img{object-fit:contain;filter:invert(1) hue-rotate(180deg) contrast(1.15)}
 .pics figcaption{position:absolute;left:0;top:0;font-size:20px;font-weight:700;background:#000c;padding:5px 12px;border-bottom-right-radius:10px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
 .ptitle{font-size:24px;font-weight:800;margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline}
@@ -575,8 +619,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;color:#cfe
 .leadnote .th{font-size:20px;line-height:27px;max-height:81px;overflow-y:auto;color:#dfe6e2}.model{font-family:ui-monospace,Menlo,monospace;color:var(--open);font-size:19px;font-weight:500}
 .feed{overflow-y:auto;flex:1;scroll-behavior:smooth;padding-right:6px}
 .it{display:none;border-left:5px solid var(--c);padding:6px 12px;margin-bottom:8px;background:#0f1512;border-radius:8px}
-.it.on{display:block;animation:slidein .35s both}
-@keyframes slidein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.it.on{display:block;animation:flash 1.2s}
+@keyframes flash{from{background:#2a4034}to{background:#0f1512}}
 .who{display:flex;gap:12px;align-items:baseline;font-size:21px;flex-wrap:wrap}
 .who b{color:var(--c);font-size:23px}.leadnote .who b{color:#fff}
 .stepn{color:var(--ink2);font-size:19px}
@@ -600,7 +644,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;color:#cfe
 .tbl td.dim,.tbl tr.pend td{color:#7b8780}
 .tbl .tag{font-size:18px;color:var(--ink2);border:1px solid var(--line);border-radius:6px;padding:1px 8px;margin-left:10px;white-space:nowrap}
 .okc{color:var(--ok);font-weight:800}
-.tbl.big{font-size:30px;margin-top:24px}.tbl.big td{padding:24px 14px}.tbl.big th{font-size:21px}
+.tbl.big{font-size:27px;margin-top:24px}.tbl.big td{padding:26px 12px}.tbl.big th{font-size:20px;vertical-align:bottom}
+.tbl td.bname{white-space:nowrap}
 .tbl tr.total td{border-top:2px solid var(--ink2);border-bottom:none;color:var(--ink2)}.tbl tr.total b{color:var(--ink);font-size:1.25em}
 /* limits */
 .limits{margin:24px 0 0;padding:0;list-style:none;max-width:1740px}
@@ -608,7 +653,11 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;color:#cfe
 .limits li:before{content:"";position:absolute;left:0;top:28px;width:14px;height:14px;border-radius:50%;background:var(--open)}
 .limits b{color:#fff}.limits q{color:var(--ink2);font-style:italic}
 /* cards */
-.card{padding:150px 110px}.card h1{font-size:104px}.card .kicker{font-size:28px;margin-bottom:26px}
+.slide.card.active{display:flex;flex-direction:column;justify-content:center}
+.crewline{display:flex;gap:22px;margin-top:40px}
+.crewline span{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 24px;font-size:28px;color:var(--ink2);line-height:1.3}
+.crewline b{display:block;color:var(--open);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:30px;margin-bottom:6px}
+.card{padding:110px 110px 150px}.card h1{font-size:104px}.card .kicker{font-size:28px;margin-bottom:26px}
 .feed.static{overflow:visible}.feed.static .it{padding:16px 24px;margin-bottom:22px}
 .feed.static .th{font-size:34px}.feed.static .who{font-size:30px}.feed.static .who b{font-size:36px}
 .feed.static .act,.feed.static .res{font-size:30px}.feed.static .stepn{font-size:26px}

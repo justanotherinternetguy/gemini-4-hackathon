@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
 if [ "$#" -gt 0 ]; then $PY -m pcb.site.pick --runs "$@"; else $PY -m pcb.site.pick; fi
-$PY -m pcb.site.videos --missing --seconds "${SECONDS_PER_VIDEO:-20}" --fps "${FPS:-10}"
+$PY -m pcb.site.videos --missing --seconds "${SECONDS_PER_VIDEO:-20}" --fps "${FPS:-12}"
 $PY -m pcb.site.build
 $PY -m pcb.site.summary
 echo "open runs/site/index.html"

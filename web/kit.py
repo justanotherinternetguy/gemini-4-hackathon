@@ -90,6 +90,8 @@ def line_chart(series: list[dict], *, w: int = 640, h: int = 280, xlabel: str = 
     if y1 <= y0:
         y1 = y0 + 1
     yt = nice_ticks(y0, y1, 4)
+    if all(float(y).is_integer() for y in ys):          # counts: whole-number ticks only
+        yt = [t for t in yt if float(t).is_integer()] or yt
     y0, y1 = min(y0, yt[0]), max(y1, yt[-1])
     L, R, T, B = 48, 16, 12, 40 if xlabel else 28
     pw, ph = w - L - R, h - T - B
