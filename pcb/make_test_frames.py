@@ -1,49 +1,95 @@
-"""Make a fake "routing in progress" sequence from one finished board, to test the live viewer.
+"""Make a fake "routing in progress" sequence from one finished board, to test the viewers.
 
-Takes a routed board and writes N copies into the output folder, each keeping only the first k
-tracks and vias, ending with the full board. This is a TEST FIXTURE for the viewer: the order is
-file order, not how any router actually worked, so it must not be shown as a method's run.
+Takes a routed board and writes versions into the output folder: version 0 has no copper, and
+each later version adds the copper of one more net (connection group), ending with the full board.
+With --agents N the versions are credited to made-up workers w1..wN in turn.
 
-    python pcb/make_test_frames.py --routed board.kicad_pcb --out runs/live --frames 30 --delay 0.5
+This is a TEST FIXTURE. The order and the worker names are invented, so its output must never be
+shown as a real method's run.
+
+    python pcb/make_test_frames.py --routed board.kicad_pcb --out runs/test --agents 4 --delay 0.6
 """
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import time
 from pathlib import Path
 
 ITEM_RE = re.compile(r"\n\t\((?:segment|via|arc)\b.*?\n\t\)", re.S)
+NET_RE = re.compile(r"\(net\s+(\d+)")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--routed", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--frames", type=int, default=30)
-    ap.add_argument("--delay", type=float, default=0.0, help="seconds between files (0 = write all at once)")
+    ap.add_argument("--agents", type=int, default=0, help="credit versions to this many made-up workers")
+    ap.add_argument("--per-step", type=int, default=1, help="nets added per version")
+    ap.add_argument("--delay", type=float, default=0.0, help="seconds between bursts (0 = write all at once)")
+    ap.add_argument("--no-start", action="store_true", help="do not write the empty starting version "
+                                                            "(the caller already put it there)")
+    ap.add_argument("--events", action="store_true", help="also write events.jsonl and result.json, "
+                                                          "as pcb/CONTRACT.md describes")
+    ap.add_argument("--leave", type=int, default=0, help="leave this many nets unrouted at the end, "
+                                                         "to test what an unfinished board looks like")
+    ap.add_argument("--burst", type=int, default=1, help="versions written back to back before each pause, "
+                                                         "so several workers are seen working at once")
     args = ap.parse_args()
 
     text = Path(args.routed).read_text()
     items = list(ITEM_RE.finditer(text))
     if not items:
         raise SystemExit("no tracks or vias found in the routed board")
+    net_of = [int(m.group(1)) if (m := NET_RE.search(it.group(0))) else 0 for it in items]
+    order: list[int] = []
+    for n in net_of:
+        if n not in order:
+            order.append(n)
+    if args.leave > 0:
+        order = order[:max(1, len(order) - args.leave)]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    n = len(items)
-    for i in range(args.frames + 1):
-        keep = round(n * i / args.frames)
+
+    def write(name: str, keep_nets: set[int]) -> None:
         parts, last = [], 0
-        for j, m in enumerate(items):
-            parts.append(text[last:m.start()])
-            if j < keep:
-                parts.append(m.group(0))
-            last = m.end()
+        for it, n in zip(items, net_of):
+            parts.append(text[last:it.start()])
+            if n in keep_nets:
+                parts.append(it.group(0))
+            last = it.end()
         parts.append(text[last:])
-        (out / f"step_{i:03d}.kicad_pcb").write_text("".join(parts))
-        print(f"step_{i:03d}: {keep}/{n} copper items", flush=True)
-        if args.delay:
+        (out / name).write_text("".join(parts))
+
+    if not args.no_start:
+        write("v000.kicad_pcb", set())
+        print("v000: no copper", flush=True)
+    kept: set[int] = set()
+    step = 0
+    t0 = time.time()
+    names = dict(re.findall(r'\(net\s+(\d+)\s+"([^"]*)"\)', text))
+
+    def event(**kw) -> None:
+        if args.events:
+            with open(out / "events.jsonl", "a") as fh:
+                fh.write(json.dumps({"t": round(time.time() - t0, 2), **kw}) + "\n")
+    for i in range(0, len(order), args.per_step):
+        if args.delay and step % max(1, args.burst) == 0:
             time.sleep(args.delay)
+        elif args.delay:
+            time.sleep(0.05)                      # keep modification times in order within a burst
+        kept |= set(order[i:i + args.per_step])
+        step += 1
+        who = f"__w{(step - 1) % args.agents + 1}" if args.agents else ""
+        write(f"v{step:03d}{who}.kicad_pcb", kept)
+        print(f"v{step:03d}{who}: {len(kept)}/{len(order)} nets", flush=True)
+        for n in order[i:i + args.per_step]:
+            event(agent=who[2:] or "router", type="done", net=names.get(str(n)) or f"net {n}",
+                  file=f"v{step:03d}{who}.kicad_pcb")
+    if args.events:
+        (out / "result.json").write_text(json.dumps({"claimed_clean": args.leave == 0, "attempts": step,
+                                                     "note": "made-up test run"}))
 
 
 if __name__ == "__main__":

@@ -35,6 +35,9 @@ PCBWorld's built-in agent defaults to 256 tokens and routes nothing. Use 4,096 o
 
 ## Part 2. Brief for Hendry's coding agent
 
+**The exact input and output format between your solver and our viewer is in
+[`pcb/CONTRACT.md`](CONTRACT.md). Read that first. It supersedes the file-naming notes below.**
+
 ### Your task
 
 Build a swarm of Gemini managed agents that routes PCBWorld's real boards and scores a higher
@@ -196,16 +199,29 @@ this page on hackathon rules, this page is right: it comes from the official par
 - A folder of routed boards per run: `<run>/<board_id>.kicad_pcb` for the final board. For the live
   demo, also save each new best version as it happens into a folder we agree on. Files are shown in
   the order they are saved.
+- **Credit the agent in the file name.** End each live version's name with `__<agent>`, for example
+  `0007__w3.kicad_pcb` when worker w3 produced that change. The 3D viewer draws the copper that is
+  new in that version with w3's marker laying it, and several agents saving close together are
+  shown working at the same time. Save the starting board (no new copper) first, with no suffix.
+  Only credit an agent for work it really did: the viewer shows whatever the file names say.
 - Per board: attempts used, wall-clock seconds, and whether the swarm believes it is clean.
 - The exact command that reproduces the run.
 
 ### On this branch
 
-- `pcb/live_view.py`: watches a folder of board files, redraws the newest one, and shows open
-  connections and rule violations from KiCad's checker. Tested today.
+- `pcb/view3d.py` (with `view3d.html`, `board_parse.py`, `vendor/`): the demo. Import a board,
+  watch it assemble from the file, press Route, watch each agent lay its copper, then get a
+  verdict from KiCad's checker: a clean pass, or the exact connections left for the engineer.
+  Tested today with made-up workers.
+  `cd pcb && python view3d.py --boards-dir $PCBWORLD_DATA_ROOT/pcbench/exacad_sorted --route-cmd '<your command>'`
+  **`--route-cmd` is how your swarm plugs in.** The page's Route button runs it with these filled
+  in: `{unrouted}` the starting board, `{project}` its `.kicad_pro`, `{out}` the folder to save
+  versions into. Save versions as described above, and exit when finished. Without `--route-cmd`
+  the Route button runs a dummy with fake agents, and the page labels it as test data.
+- `pcb/live_view.py`: the flat 2D fallback viewer with the same counts. Tested today.
   `python pcb/live_view.py --watch <folder> --project <board>.kicad_pro --port 8765`
-- `pcb/make_test_frames.py`: makes a fake step-by-step sequence from a finished board, only for
-  testing the viewer. Never present its output as a real run.
+- `pcb/make_test_frames.py`: makes a fake step-by-step sequence from a finished board with made-up
+  worker names, only for testing the viewers. Never present its output as a real run.
 - `pcb/bench/run_agent_baseline.sh` and `pcb/bench/models.json`: the single-agent baseline.
 
 ### Time
