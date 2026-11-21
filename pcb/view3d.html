@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<style>
+  :root { --ink:#1c2420; --dim:#66736b; --panel:rgba(255,255,255,.82); --line:rgba(28,36,32,.12);
+          --good:#12a05c; --bad:#e23d4f; }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; overflow:hidden; background:#eef1ea; color:var(--ink);
+    font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; }
+  canvas { display:block; }
+  .hud { position:fixed; top:18px; right:18px; width:330px; display:flex; flex-direction:column; gap:10px; }
+  .card { background:var(--panel); backdrop-filter:blur(10px); border:1px solid var(--line);
+    border-radius:14px; padding:12px 15px; }
+  .title { position:fixed; left:22px; top:18px; }
+  .title h1 { margin:0; font-size:22px; font-weight:680; }
+  .title div { color:var(--dim); font-size:13px; margin-top:2px; }
+  .label { color:var(--dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; }
+  .big { font-size:54px; font-weight:720; line-height:1.05; font-variant-numeric:tabular-nums; }
+  .big small { font-size:17px; color:var(--dim); font-weight:500; margin-left:6px; }
+  .row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .mid { font-size:24px; font-weight:660; font-variant-numeric:tabular-nums; }
+  .bar { height:7px; background:rgba(28,36,32,.1); border-radius:99px; overflow:hidden; margin-top:8px; }
+  .bar > i { display:block; height:100%; width:0; background:var(--good); transition:width .35s ease; }
+  .status { font-weight:700; font-size:16px; text-align:center; padding:10px 12px; border-radius:12px;
+    background:var(--panel); border:1px solid var(--line); color:var(--dim); }
+  .status.pass { background:var(--good); color:#fff; border-color:var(--good); }
+  .status.fail { color:var(--bad); border-color:var(--bad); }
+  .agents { display:flex; flex-direction:column; gap:6px; max-height:34vh; overflow:auto; }
+  .agent { display:flex; align-items:center; gap:9px; font-size:13.5px; }
+  .agent i { width:11px; height:11px; border-radius:50%; flex:none; }
+  .agent b { font-weight:640; min-width:64px; }
+  .agent span { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .agent.busy span { color:var(--ink); }
+  .ctl { position:fixed; left:22px; bottom:18px; display:flex; gap:8px; align-items:center; }
+  button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px;
+    padding:8px 14px; font:inherit; cursor:pointer; }
+  button:hover { background:#fff; }
+  .legend { color:var(--dim); font-size:12.5px; margin-left:10px; display:flex; gap:14px; }
+  .legend i { display:inline-block; width:14px; height:4px; border-radius:2px; vertical-align:middle; margin-right:5px; }
+  .tip { position:fixed; pointer-events:none; transform:translate(-50%,-150%); font-size:12px; font-weight:650;
+    color:#fff; padding:3px 8px; border-radius:99px; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.18); }
+  .good { color:var(--good); } .bad { color:var(--bad); }
+</style>
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="title"><h1>__TITLE__</h1><div id="sub">waiting for the first board…</div></div>
+<div class="hud">
+  <div class="status" id="status">no board yet</div>
+  <div class="card"><div class="label">Connections still open</div>
+    <div class="big" id="open">–<small id="total"></small></div><div class="bar"><i id="bar"></i></div></div>
+  <div class="row">
+    <div class="card"><div class="label">Violations</div><div class="mid" id="viol">–</div></div>
+    <div class="card"><div class="label">Copper</div><div class="mid" id="len">–</div></div>
+    <div class="card"><div class="label">Versions</div><div class="mid" id="count">0</div></div>
+  </div>
+  <div class="card"><div class="label" style="margin-bottom:8px">Agents</div><div class="agents" id="agents"></div></div>
+</div>
+<div class="ctl"><button id="replay">Replay</button><button id="spin">Pause spin</button><button id="ghost">Solid parts</button>
+  <div class="legend"><span><i style="background:#d98632"></i>front copper</span>
+  <span><i style="background:#4f86d9"></i>back copper</span><span><i style="background:#e23d4f"></i>still to connect</span></div></div>
+<div id="tips"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from '/vendor/OrbitControls.js';
+
+const T = 1.6;                                   // board thickness, mm
+const COPPER = { front: 0xd98632, back: 0x4f86d9, inner: 0x8a8f98 };
+const PALETTE = ['#e6396b', '#12a05c', '#e0a100', '#2f8fe6', '#8a5cf0', '#f06a2a', '#11a8a8', '#c03fc0'];
+const $ = id => document.getElementById(id);
+
+// ---------- three.js setup ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef1ea);
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 1, 5000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.55;
+controls.maxPolarAngle = Math.PI * 0.49;
+scene.add(new THREE.HemisphereLight(0xffffff, 0xcfd6cc, 1.15));
+const sun = new THREE.DirectionalLight(0xffffff, 2.1); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; scene.add(sun); scene.add(sun.target);
+const world = new THREE.Group(); scene.add(world);
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); });
+
+let C = { x: 0, y: 0 }, SPAN = 60;                // board centre and size
+const P = (x, y) => [x - C.x, y - C.y];           // board mm -> scene x,z
+
+function mat(color, o = {}) { return new THREE.MeshStandardMaterial({ color, roughness: .62, metalness: .05, ...o }); }
+const M = {
+  board: mat(0x2f6b54, { roughness: .78, transparent: true, opacity: .62, depthWrite: false }),
+  chip: mat(0x3b3e45, { roughness: .5 }), connector: mat(0x33353b, { roughness: .55 }),
+  resistor: mat(0xc9cbc4), cap: mat(0xc2a57c), can: mat(0xd9dbd8, { metalness: .35, roughness: .35 }),
+  led: mat(0xf2e7c6, { transparent: true, opacity: .92 }), crystal: mat(0xcfd3d6, { metalness: .6, roughness: .3 }),
+  switch: mat(0x2c2e33), inductor: mat(0x5a5d63), part: mat(0x494c53),
+  pad: mat(0xc9ccd0, { metalness: .75, roughness: .32 }), gold: mat(0xd6ae4a, { metalness: .8, roughness: .3 }),
+};
+
+const parts = []; let ghost = true;
+function setGhost(on) { ghost = on; for (const m of parts) m.material.opacity = on ? .22 : 1; }
+function buildScene(s) {
+  const [x0, y0, x1, y1] = s.bbox; C = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
+  const W = x1 - x0, H = y1 - y0; SPAN = Math.max(W, H);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(W, T, H), M.board);
+  board.position.y = -T / 2; board.receiveShadow = true; board.castShadow = true; world.add(board);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(SPAN * 12, SPAN * 12), new THREE.ShadowMaterial({ opacity: .16 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -T - Math.max(4, SPAN * .06); floor.receiveShadow = true; world.add(floor);
+
+  for (const c of s.components) {
+    const [x, z] = P(c.x, c.y), up = c.side === 'front' ? 1 : -1, base = c.side === 'front' ? 0 : -T;
+    let mesh;
+    if (c.kind === 'can') {
+      const r = Math.min(c.w, c.h) / 2;
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, c.height, 28), M.can);
+    } else {
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(c.w, c.height, c.h), M[c.kind] || M.part);
+    }
+    mesh.position.set(x, base + up * (c.height / 2 + 0.08), z); mesh.rotation.y = c.rot * Math.PI / 180;
+    mesh.castShadow = true; mesh.receiveShadow = true; world.add(mesh);
+    if (c.w * c.h > 45) {                          // big parts hide the copper under them: draw them as glass
+      mesh.material = mesh.material.clone(); mesh.material.transparent = true; mesh.material.depthWrite = false;
+      mesh.userData.big = true; parts.push(mesh); mesh.castShadow = false;
+    }
+  }
+  const ring = new THREE.CylinderGeometry(1, 1, 1, 20), box = new THREE.BoxGeometry(1, 1, 1);
+  for (const p of s.pads) {
+    const [x, z] = P(p.x, p.y);
+    if (p.th) {
+      const r = Math.max(.35, Math.min(p.w, p.h) / 2);
+      for (const y of [0.04, -T - 0.04]) {
+        const m = new THREE.Mesh(ring, M.pad); m.scale.set(r, .08, r); m.position.set(x, y, z); world.add(m);
+      }
+      const pin = new THREE.Mesh(ring, M.gold), pr = Math.max(.18, (p.drill || .6) * .36);
+      pin.scale.set(pr, T + 2.6, pr); pin.position.set(x, -T / 2 - .5, z); pin.castShadow = true; world.add(pin);
+    } else {
+      const m = new THREE.Mesh(box, M.pad), y = p.side === 'front' ? 0.035 : -T - 0.035;
+      m.scale.set(Math.max(.2, p.w), .07, Math.max(.2, p.h)); m.position.set(x, y, z);
+      m.rotation.y = p.rot * Math.PI / 180; world.add(m);
+    }
+  }
+  setGhost(true);
+  const d = SPAN * 1.55;
+  camera.position.set(d * .62, d * .72, d * .86); controls.target.set(0, 0, 0); controls.update();
+  sun.position.set(-SPAN * .7, SPAN * 1.5, SPAN * .5);
+  const sc = sun.shadow.camera; sc.left = sc.bottom = -SPAN; sc.right = sc.top = SPAN; sc.near = 1; sc.far = SPAN * 5;
+  sc.updateProjectionMatrix();
+}
+
+// ---------- copper ----------
+const segGeo = new THREE.BoxGeometry(1, 1, 1); segGeo.translate(.5, 0, 0);
+const capGeo = new THREE.CylinderGeometry(.5, .5, 1, 14);
+const copper = new Map();                          // key -> { group, seg | via }
+const copperGroup = new THREE.Group(); world.add(copperGroup);
+const yOf = side => side === 'back' ? -T - 0.06 : 0.06;
+
+function makeSeg(s, color) {
+  const [ax, az] = P(...s.a), [bx, bz] = P(...s.b), len = Math.hypot(bx - ax, bz - az) || 1e-3;
+  const w = Math.max(.28, s.w * 1.15), th = .12, y = yOf(s.side);
+  const m = new THREE.MeshStandardMaterial({ color, roughness: .38, metalness: .55, emissive: color, emissiveIntensity: .55 });
+  const g = new THREE.Group();
+  const bar = new THREE.Mesh(segGeo, m); bar.scale.set(1e-3, th, w); bar.castShadow = true;
+  const c0 = new THREE.Mesh(capGeo, m); c0.scale.set(w, th, w);
+  const c1 = new THREE.Mesh(capGeo, m); c1.scale.set(w, th, w); c1.visible = false;
+  g.add(bar, c0, c1); g.position.set(ax, y, az); g.rotation.y = Math.atan2(-(bz - az), bx - ax);
+  copperGroup.add(g);
+  return { g, bar, c1, m, len, a: [ax, az], b: [bx, bz], y, side: s.side, net: s.net,
+    set(t) { bar.scale.x = Math.max(1e-3, len * t); c1.position.x = len * t; c1.visible = t > 0; } };
+}
+function makeVia(v, color) {
+  const [x, z] = P(v.x, v.y), r = Math.max(.35, v.size / 2);
+  const m = new THREE.MeshStandardMaterial({ color, roughness: .35, metalness: .6, emissive: color, emissiveIntensity: .55 });
+  const g = new THREE.Mesh(capGeo, m); g.scale.set(1e-3, T + .3, 1e-3); g.position.set(x, -T / 2, z); copperGroup.add(g);
+  return { g, m, r, x, z, set(t) { const k = Math.max(1e-3, r * 2 * t); g.scale.set(k, T + .3, k); } };
+}
+const settle = [];                                 // materials cooling from agent colour to copper
+function cool(m, side) { settle.push({ m, to: new THREE.Color(COPPER[side] ?? COPPER.front), t: 0 }); }
+
+// ---------- open-connection web and violation markers ----------
+const webGroup = new THREE.Group(); world.add(webGroup);
+const webMat = new THREE.LineBasicMaterial({ color: 0xe23d4f, transparent: true, opacity: .85 });
+const violGroup = new THREE.Group(); world.add(violGroup);
+function setWeb(pairs) {
+  webGroup.clear();
+  for (const [x1, y1, x2, y2] of pairs || []) {
+    const [ax, az] = P(x1, y1), [bx, bz] = P(x2, y2), d = Math.hypot(bx - ax, bz - az);
+    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(ax, .35, az),
+      new THREE.Vector3((ax + bx) / 2, .6 + d * .2, (az + bz) / 2), new THREE.Vector3(bx, .35, bz));
+    webGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(18)), webMat));
+  }
+}
+function setViolations(pts) {
+  violGroup.clear();
+  for (const [x, y] of pts || []) {
+    const [px, pz] = P(x, y);
+    const m = new THREE.Mesh(new THREE.TorusGeometry(1.1, .16, 8, 28),
+      new THREE.MeshBasicMaterial({ color: 0xe23d4f, transparent: true, opacity: .9 }));
+    m.rotation.x = Math.PI / 2; m.position.set(px, .5, pz); violGroup.add(m);
+  }
+}
+
+// ---------- agents ----------
+const agents = new Map();                          // name -> { color, queue, job, marker, tip, el }
+function agent(name) {
+  const key = name || 'router';
+  if (agents.has(key)) return agents.get(key);
+  const color = PALETTE[agents.size % PALETTE.length], c3 = new THREE.Color(color);
+  const marker = new THREE.Group();
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color: c3 }));
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.12, .5, 1, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: c3, transparent: true, opacity: .32, side: THREE.DoubleSide }));
+  marker.add(orb, beam); marker.visible = false; world.add(marker);
+  const tip = document.createElement('div'); tip.className = 'tip'; tip.style.background = color;
+  tip.textContent = key; tip.style.display = 'none'; $('tips').append(tip);
+  const el = document.createElement('div'); el.className = 'agent';
+  el.innerHTML = `<i style="background:${color}"></i><b></b><span>idle</span>`; el.children[1].textContent = key;
+  $('agents').append(el);
+  const a = { name: key, color: c3, queue: [], job: null, marker, orb, beam, tip, el, done: 0 };
+  agents.set(key, a); return a;
+}
+function say(a, text, busy) { a.el.lastChild.textContent = text; a.el.classList.toggle('busy', !!busy); }
+
+// order one net's new segments into a drawable path (each starts where the last ended when it can)
+function chain(segs) {
+  const left = segs.slice(), out = []; let tip = null;
+  const d2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2;
+  while (left.length) {
+    let bi = 0, flip = false, best = Infinity;
+    if (tip) left.forEach((s, i) => { const da = d2(s.a, tip), db = d2(s.b, tip);
+      if (da < best) { best = da; bi = i; flip = false; } if (db < best) { best = db; bi = i; flip = true; } });
+    const s = left.splice(bi, 1)[0];
+    out.push(flip ? { ...s, a: s.b, b: s.a } : s); tip = out[out.length - 1].b;
+  }
+  return out;
+}
+
+// ---------- applying board versions ----------
+let frames = [], heavy = [], applied = -1, nets = {}, total = null, speed = 1, pendingStats = null;
+async function getHeavy(i) { if (!heavy[i] || heavy[i].open_pairs == null) heavy[i] = await (await fetch('/frame/' + i)).json(); return heavy[i]; }
+
+function applyInstant(h) {
+  const want = new Set([...h.segments.map(s => s.k), ...h.vias.map(v => v.k)]);
+  for (const [k, o] of copper) if (!want.has(k)) { copperGroup.remove(o.g); copper.delete(k); }
+  for (const s of h.segments) if (!copper.has(s.k)) { const o = makeSeg(s, COPPER[s.side] ?? COPPER.front);
+    o.m.emissiveIntensity = .06; o.set(1); copper.set(s.k, o); }
+  for (const v of h.vias) if (!copper.has(v.k)) { const o = makeVia(v, COPPER.front); o.m.emissiveIntensity = .06; o.set(1); copper.set(v.k, o); }
+}
+function applyAnimated(i, h) {
+  const f = frames[i], a = agent(f.agent);
+  const want = new Set([...h.segments.map(s => s.k), ...h.vias.map(v => v.k)]);
+  for (const [k, o] of copper) if (!want.has(k)) { copper.delete(k); ripping.push({ o, t: 0 }); }
+  const fresh = h.segments.filter(s => !copper.has(s.k)), byNet = new Map();
+  for (const s of fresh) { if (!byNet.has(s.net)) byNet.set(s.net, []); byNet.get(s.net).push(s); }
+  const freshVias = h.vias.filter(v => !copper.has(v.k));
+  for (const [net, segs] of byNet) {
+    const path = chain(segs).map(s => { const o = makeSeg(s, a.color); copper.set(s.k, o); return o; });
+    const vias = freshVias.filter(v => v.net === net).map(v => { const o = makeVia(v, a.color); copper.set(v.k, o); return o; });
+    const len = path.reduce((n, o) => n + o.len, 0);
+    a.queue.push({ net, path, vias, len, dur: Math.min(2.6, Math.max(.55, len / 38)), t: 0, frame: i });
+  }
+  for (const v of freshVias.filter(v => !byNet.has(v.net))) { const o = makeVia(v, a.color); copper.set(v.k, o);
+    a.queue.push({ net: v.net, path: [], vias: [o], len: 1, dur: .4, t: 0, frame: i }); }
+  if (!fresh.length && !freshVias.length) showStats(i);
+}
+const ripping = [];
+
+function showStats(i) {
+  const f = frames[i]; if (!f) return;
+  $('sub').textContent = f.name + '  ·  version ' + (i + 1) + ' of ' + frames.length;
+  $('len').textContent = Math.round(f.length_mm) + ' mm'; $('count').textContent = frames.length;
+  if (!f.checked) { pendingStats = i; return; }
+  pendingStats = null;
+  if (total == null && frames[0] && frames[0].checked) total = frames[0].open;
+  $('open').firstChild.nodeValue = f.open; $('open').className = 'big ' + (f.open === 0 ? 'good' : '');
+  $('total').textContent = total != null ? 'of ' + total : '';
+  $('bar').style.width = (total ? Math.max(0, 100 * (1 - f.open / total)) : 0) + '%';
+  $('viol').textContent = f.violations; $('viol').className = 'mid ' + (f.violations === 0 ? 'good' : 'bad');
+  const st = $('status');
+  if (f.open === 0 && f.violations === 0) { st.textContent = 'CLEAN PASS · fully connected, zero violations'; st.className = 'status pass'; }
+  else if (f.open === 0) { st.textContent = 'connected · ' + f.violations + ' violations to fix'; st.className = 'status fail'; }
+  else { st.textContent = 'routing · ' + f.open + ' connections to go'; st.className = 'status'; }
+  getHeavy(i).then(h => { if (i === applied || pendingStats == null) { setWeb(h.open_pairs); setViolations(h.viol_pts); } });
+}
+
+let busy = false, firstLoad = true;
+async function poll() {
+  if (busy) return; busy = true;
+  try {
+    const s = await (await fetch('/state')).json();
+    if (s.has_scene && !world.userData.built) { const sc = await (await fetch('/scene')).json(); nets = sc.nets || {}; buildScene(sc); world.userData.built = true; }
+    frames = s.frames;
+    if (world.userData.built) {
+      while (applied < frames.length - 1) {
+        const i = applied + 1, h = await getHeavy(i);
+        if (firstLoad && frames.length > 1) { applyInstant(h); applied = i; if (i === frames.length - 1) showStats(i); }
+        else { applied = i; if (i === 0) { applyInstant(h); showStats(0); } else applyAnimated(i, h); }
+      }
+      firstLoad = false;
+      if (pendingStats != null && frames[pendingStats] && frames[pendingStats].checked) { heavy[pendingStats] = null; showStats(pendingStats); }
+      $('count').textContent = frames.length;
+    }
+  } catch (e) { console.error(e); }
+  busy = false;
+}
+
+$('replay').onclick = async () => {
+  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear();
+  for (const a of agents.values()) { a.queue = []; a.job = null; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
+  applied = -1; firstLoad = false; total = null; pendingStats = null; speed = Math.max(1, frames.length / 14);
+};
+$('ghost').onclick = e => { setGhost(!ghost); e.target.textContent = ghost ? 'Solid parts' : 'Glass parts'; };
+$('spin').onclick = e => { controls.autoRotate = !controls.autoRotate; e.target.textContent = controls.autoRotate ? 'Pause spin' : 'Spin'; };
+
+// ---------- animation loop ----------
+const clock = new THREE.Clock(), v3 = new THREE.Vector3();
+function tick() {
+  const dt = Math.min(.05, clock.getDelta()), now = clock.elapsedTime;
+  for (const a of agents.values()) {
+    if (!a.job && a.queue.length) { a.job = a.queue.shift(); say(a, 'routing ' + (nets[a.job.net] || 'net ' + a.job.net), true); }
+    const j = a.job; if (!j) { a.marker.visible = false; a.tip.style.display = 'none'; continue; }
+    j.t += dt * speed / j.dur; const t = Math.min(1, j.t);
+    let run = t * j.len, tipPos = null;
+    for (const o of j.path) { const k = o.len ? Math.min(1, Math.max(0, run / o.len)) : 1; o.set(k); run -= o.len;
+      if (k > 0) tipPos = [o.a[0] + (o.b[0] - o.a[0]) * k, o.y, o.a[1] + (o.b[1] - o.a[1]) * k]; }
+    for (const o of j.vias) { o.set(t); if (!tipPos) tipPos = [o.x, .1, o.z]; }
+    if (tipPos) {
+      const r = Math.max(.7, SPAN * .016), up = tipPos[1] < -.5 ? -1 : 1;
+      a.marker.visible = true; a.marker.position.set(tipPos[0], tipPos[1], tipPos[2]);
+      a.orb.scale.setScalar(r * (1 + .15 * Math.sin(now * 9))); a.orb.position.y = up * r * 1.4;
+      a.beam.scale.set(r * 1.1, r * 3.2, r * 1.1); a.beam.position.y = up * r * 3.0;
+      v3.set(tipPos[0], tipPos[1] + up * r * 5.0, tipPos[2]).applyMatrix4(world.matrixWorld).project(camera);
+      a.tip.style.display = 'block'; a.tip.style.left = ((v3.x + 1) / 2 * innerWidth) + 'px'; a.tip.style.top = ((1 - v3.y) / 2 * innerHeight) + 'px';
+    }
+    if (t >= 1) {
+      for (const o of j.path) cool(o.m, o.side); for (const o of j.vias) cool(o.m, 'front');
+      a.done++; say(a, a.done + ' connection' + (a.done > 1 ? 's' : '') + ' laid'); a.job = null;
+      if (!a.queue.some(q => q.frame === j.frame)) showStats(Math.max(j.frame, [...agents.values()].every(x => !x.job && !x.queue.length) ? applied : j.frame));
+    }
+  }
+  for (let i = settle.length - 1; i >= 0; i--) { const s = settle[i]; s.t += dt / .7;
+    s.m.color.lerp(s.to, .12); s.m.emissive.lerp(s.to, .12); s.m.emissiveIntensity = Math.max(.06, .55 * (1 - s.t));
+    if (s.t >= 1) { s.m.color.copy(s.to); s.m.emissive.copy(s.to); settle.splice(i, 1); } }
+  for (let i = ripping.length - 1; i >= 0; i--) { const r = ripping[i]; r.t += dt / .5;
+    r.o.m.color.set(0xe23d4f); r.o.m.emissive.set(0xe23d4f); r.o.m.transparent = true; r.o.m.opacity = Math.max(0, 1 - r.t);
+    if (r.t >= 1) { copperGroup.remove(r.o.g); ripping.splice(i, 1); } }
+  webMat.opacity = .55 + .3 * Math.sin(now * 3);
+  for (const m of violGroup.children) m.scale.setScalar(1 + .25 * Math.sin(now * 6));
+  controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick);
+}
+setInterval(poll, 350); poll(); tick();
+</script>
+</body></html>

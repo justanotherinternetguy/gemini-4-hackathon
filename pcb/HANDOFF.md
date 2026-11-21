@@ -196,16 +196,24 @@ this page on hackathon rules, this page is right: it comes from the official par
 - A folder of routed boards per run: `<run>/<board_id>.kicad_pcb` for the final board. For the live
   demo, also save each new best version as it happens into a folder we agree on. Files are shown in
   the order they are saved.
+- **Credit the agent in the file name.** End each live version's name with `__<agent>`, for example
+  `0007__w3.kicad_pcb` when worker w3 produced that change. The 3D viewer draws the copper that is
+  new in that version with w3's marker laying it, and several agents saving close together are
+  shown working at the same time. Save the starting board (no new copper) first, with no suffix.
+  Only credit an agent for work it really did: the viewer shows whatever the file names say.
 - Per board: attempts used, wall-clock seconds, and whether the swarm believes it is clean.
 - The exact command that reproduces the run.
 
 ### On this branch
 
-- `pcb/live_view.py`: watches a folder of board files, redraws the newest one, and shows open
-  connections and rule violations from KiCad's checker. Tested today.
+- `pcb/view3d.py` (with `view3d.html`, `board_parse.py`, `vendor/`): the demo viewer. It builds a
+  3D model of the real board and animates each agent laying its copper, with open connections as a
+  red web and counts from KiCad's checker. Tested today on a made-up four-worker sequence.
+  `cd pcb && python view3d.py --watch <folder> --project <board>.kicad_pro --port 8766`
+- `pcb/live_view.py`: the flat 2D fallback viewer with the same counts. Tested today.
   `python pcb/live_view.py --watch <folder> --project <board>.kicad_pro --port 8765`
-- `pcb/make_test_frames.py`: makes a fake step-by-step sequence from a finished board, only for
-  testing the viewer. Never present its output as a real run.
+- `pcb/make_test_frames.py`: makes a fake step-by-step sequence from a finished board with made-up
+  worker names, only for testing the viewers. Never present its output as a real run.
 - `pcb/bench/run_agent_baseline.sh` and `pcb/bench/models.json`: the single-agent baseline.
 
 ### Time
