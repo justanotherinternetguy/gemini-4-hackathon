@@ -147,7 +147,8 @@ def scripted_plans(st: dict) -> list[dict]:
         plans.append({"name": "rip-error-nets", "ripup": err_nets, "order": err_nets + open_nets, "mode": 2})
         plans.append({"name": "rip-error-nets-shove", "ripup": err_nets, "order": open_nets + err_nets, "mode": 1})
     if open_nets:
-        plans.append({"name": "rip-open-nets", "ripup": open_nets, "order": open_nets, "mode": 2})
+        plans.append({"name": "rip-open-nets", "ripup": open_nets, "order": open_nets, "mode": 2,
+                      "vias": False})   # the via plans above already search layer changes
     return plans
 
 
@@ -618,7 +619,7 @@ def main() -> None:
     ap.add_argument("--rounds", type=int, default=2, help="LLM planning rounds per board")
     ap.add_argument("--workers", type=int, default=3, help="Hydrogen plans per round (plus 2 Carbon plans)")
     ap.add_argument("--max-attempts", type=int, default=16)
-    ap.add_argument("--parallel", type=int, default=4, help="engine processes per board")
+    ap.add_argument("--parallel", type=int, default=6, help="engine processes per board (6 = a whole scripted round at once)")
     ap.add_argument("--boards-parallel", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--skip-scripted", action="store_true", help="testing: go straight to the agents")

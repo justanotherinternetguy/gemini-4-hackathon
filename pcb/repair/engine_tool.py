@@ -361,7 +361,14 @@ class Session:
                         ok = self._via_attempt(start, vias, mode)
                     except Exception:
                         ok = False
-                    open1, err1 = self._board_health()
+                    # The full rule check is the slow part of a trial, and most trials fail. Count open
+                    # connections first (connectivity only); run the rule check only for a trial that
+                    # actually closed one. A trial is kept on exactly the same test as before.
+                    open1, err1 = open0, err0 + 1
+                    if ok:
+                        e.build_connectivity()
+                        if int(e.get_reward_snapshot(run_drc=False).unrouted_count) < open0:
+                            open1, err1 = self._board_health()
                     if ok and open1 < open0 and err1 <= err0:
                         e.release_checkpoint(h)
                         made += 1
