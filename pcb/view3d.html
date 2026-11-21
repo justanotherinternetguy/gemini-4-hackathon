@@ -68,8 +68,9 @@
   .log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .res h2 { margin:0 0 4px; font-size:19px; font-weight:680; } .res.pass h2 { color:var(--good); } .res.need h2 { color:var(--warn); }
   .res p { margin:0 0 10px; color:var(--ink2); }
-  .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .todo small { display:block; color:var(--ink3); }
+  .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .todo small { display:block; color:var(--ink3); } .todo small.way { color:var(--ink2); margin-top:2px; }
+  .todo small.ai { color:var(--ink2); margin-top:4px; } .todo small.ai b { font-weight:600; color:#1a56c4; } .todo [data-ai] { display:block; } .offer { margin-top:5px; border-color:var(--good); color:var(--good); }
   .acts { display:flex; flex-direction:column; gap:6px; margin-top:12px; } .acts .two { display:flex; gap:6px; } .acts .two button { flex:1; }
 
   .foot { grid-column:1 / -1; grid-row:3; display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid var(--line); color:var(--ink2); min-height:50px; }
@@ -188,8 +189,9 @@ function flyTo(x, y, z, dist) { controls.autoRotate = false; $('spin').textConte
   const dir = camera.position.clone().sub(controls.target).normalize(); fly = { target: new THREE.Vector3(x, y, z), pos: new THREE.Vector3(x, y, z).add(dir.multiplyScalar(dist)), t: 0 }; }
 
 // ---------- build the board piece by piece ----------
+let scenePads = [];
 function buildScene(s) {
-  resetWorld(); nets = s.nets || {};
+  resetWorld(); nets = s.nets || {}; scenePads = s.pads || [];
   const [x0, y0, x1, y1] = s.bbox; C = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   const W = x1 - x0, H = y1 - y0; SPAN = Math.max(W, H);
   boardMesh = new THREE.Mesh(new THREE.BoxGeometry(W, T, H), mat(0x2f6b54, { roughness: .78, transparent: true, opacity: 1 }));
@@ -266,7 +268,7 @@ function makeSeg(s, color) {
   const g = new THREE.Group(), bar = new THREE.Mesh(segGeo, m), c0 = new THREE.Mesh(capGeo, m), c1 = new THREE.Mesh(capGeo, m);
   bar.scale.set(1e-3, th, w); bar.castShadow = true; c0.scale.set(w, th, w); c1.scale.set(w, th, w); c1.visible = false;
   g.add(bar, c0, c1); g.position.set(ax, y, az); g.rotation.y = Math.atan2(-(bz - az), bx - ax); copperGroup.add(g);
-  return { g, m, len, a: [ax, az], b: [bx, bz], y, side: s.side, set(t) { bar.scale.x = Math.max(1e-3, len * t); c1.position.x = len * t; c1.visible = t > 0; } };
+  return { g, m, len, a: [ax, az], b: [bx, bz], y, side: s.side, net: s.net, set(t) { bar.scale.x = Math.max(1e-3, len * t); c1.position.x = len * t; c1.visible = t > 0; } };
 }
 function makeVia(v, color) {
   const [x, z] = P(v.x, v.y), r = Math.max(.35, v.size / 2);
@@ -364,6 +366,52 @@ function showStats(i) {
 }
 const idle = () => [...agents.values()].every(a => !a.job && !a.queue.length && !a.burst.length);
 
+// ---------- what is in the way of an unmade connection (measured, no model) ----------
+const cross = (p, q, r, t) => { const o = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  const d1 = o(r, t, p), d2 = o(r, t, q), d3 = o(p, q, r), d4 = o(p, q, t); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
+const distToSeg = (c, a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], L = vx * vx + vy * vy || 1e-9;
+  const k = Math.max(0, Math.min(1, ((c[0] - a[0]) * vx + (c[1] - a[1]) * vy) / L)); return Math.hypot(a[0] + k * vx - c[0], a[1] + k * vy - c[1]); };
+function blockersFor(pair, netName) {
+  const A = P(pair[0], pair[1]), B = P(pair[2], pair[3]), tracks = new Map(), parts = new Set();
+  for (const o of copper.values()) { if (!o.a || (nets[o.net] || '') === netName) continue;
+    if (cross(A, B, o.a, o.b)) { const key = (nets[o.net] || 'net ' + o.net) + '|' + o.side; if (!tracks.has(key)) tracks.set(key, []); tracks.get(key).push(o); } }
+  for (const pd of scenePads) { if (!pd.net || (nets[pd.net] || '') === netName) continue;
+    const c = P(pd.x, pd.y); if (distToSeg(c, A, B) < Math.max(pd.w, pd.h) / 2 + .15 && pd.ref) parts.add(pd.ref); }
+  const names = [...tracks.keys()].map(k => { const [n, side] = k.split('|'); return `the ${n} track on the ${side} layer`; })
+    .concat([...parts].slice(0, 4).map(r => `a pad of ${r}`));
+  return { objs: [...tracks.values()].flat(), text: names.length ? names.slice(0, 5).join(', ') + (names.length > 5 ? ` and ${names.length - 5} more` : '') : '' };
+}
+function closeUp(pair, objs) {                      // a top-down picture of the stuck area, blockers lit, for the explanation model
+  const [ax, az] = P(pair[0], pair[1]), [bx, bz] = P(pair[2], pair[3]), d = Math.max(SPAN * .5, Math.hypot(bx - ax, bz - az) * 2.4);
+  const keepPos = camera.position.clone(), keepTarget = controls.target.clone(), keepLit = lit.map(h => h.o);
+  highlight(objs); camera.position.set((ax + bx) / 2, d, (az + bz) / 2 + d * .35); camera.lookAt((ax + bx) / 2, 0, (az + bz) / 2);
+  renderer.render(scene, camera); const url = renderer.domElement.toDataURL('image/jpeg', .82);
+  camera.position.copy(keepPos); camera.lookAt(keepTarget); highlight(keepLit); return url;
+}
+async function explainStuck(pairs, blocks, descs) {
+  for (let i = 0; i < Math.min(pairs.length, 6); i++) {
+    const box = document.querySelector(`[data-ai="${i}"]`); if (!box) return;
+    let r; try { const res = await fetch('/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        board: lastState.board, from: descs[i][0].part, to: descs[i][1].part, net: descs[i][0].net || descs[i][1].net,
+        blockers: blocks[i].text, pair: pairs[i].slice(0, 4), image: closeUp(pairs[i], blocks[i].objs) }) });
+      if (!res.ok) return; r = await res.json(); } catch (e) { return; }
+    if (!document.body.contains(box) || !r || !r.text) continue;
+    box.innerHTML = `<small class="ai"><b>Suggested by Gemini:</b> ${esc(r.text)}</small>` +
+      (r.offer ? `<button class="small offer" data-fix="${i}">Let the agents fix it</button><small class="ai">Gemini rates this fixable by the agents${r.confidence != null ? ' (' + Math.round(r.confidence * 100) + '% confident)' : ''}.</small>`
+               : (r.offer === false ? `<small class="ai">Gemini rates this one as needing you${r.confidence != null ? ' (' + Math.round(r.confidence * 100) + '% confident)' : ''}.</small>` : ''));
+    const fix = box.querySelector('[data-fix]');
+    if (fix) fix.onclick = async () => { fix.disabled = true; fix.textContent = 'Starting…';
+      const rr = await post('/retry', JSON.stringify({ net: descs[i][0].net || descs[i][1].net, pair: pairs[i].slice(0, 4), blockers: blocks[i].text }), { 'Content-Type': 'application/json' }).catch(() => ({ ok: false }));
+      if (!rr.ok) { fix.textContent = rr.error || 'Retry is not available'; } };
+  }
+}
+let lit = [];
+function highlight(objs) {
+  for (const h of lit) { h.o.m.color.copy(h.c); h.o.m.emissive.copy(h.e); h.o.m.emissiveIntensity = h.i; } lit = [];
+  for (const o of objs) { lit.push({ o, c: o.m.color.clone(), e: o.m.emissive.clone(), i: o.m.emissiveIntensity });
+    o.m.color.set(0xe23d4f); o.m.emissive.set(0xe23d4f); o.m.emissiveIntensity = .9; }
+}
+
 // ---------- phases ----------
 function setPhase(p) {
   phase = p;
@@ -403,15 +451,20 @@ function verdict() {
     v.className = 'res need';
     const pairs = h.open_pairs || [], viols = h.viol_pts || [];
     const why = {}; for (const l of (lastState.result?.left || [])) if (l && l.net && l.reason) why[l.net] = l.reason;
+    const blocks = pairs.map(p => blockersFor(p, desc(p[4]).net || desc(p[5]).net));
     const rows = pairs.map((p, i) => { const a = desc(p[4]), b = desc(p[5]);
-      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · ${why[a.net] || why[b.net] ? esc(why[a.net] || why[b.net]) : 'not connected'}</small></span><button class="small" data-pair="${i}">Show</button></div>`; })
+      const way = blocks[i].text ? `<small class="way" title="Measured: tracks and pads of other signals that cross the straight line between the two pads">In the way of the direct path: ${esc(blocks[i].text)}</small>`
+        : `<small class="way">Nothing crosses the direct path between them</small>`;
+      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · ${why[a.net] || why[b.net] ? esc(why[a.net] || why[b.net]) : 'not connected'}</small>${way}<span data-ai="${i}"></span></span><button class="small" data-pair="${i}">Show</button></div>`; })
       .concat(viols.map((p, i) => `<div class="todo"><span><b>${esc(p[2])}</b><small>${esc(desc(p[3]).part)} · rule violation</small></span><button class="small" data-viol="${i}">Show</button></div>`));
     const head = [f.open ? `${f.open} connection${f.open === 1 ? '' : 's'}` : '', f.violations ? `${f.violations} rule violation${f.violations === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
     v.innerHTML = `<h2>${head} need${(f.open + f.violations) === 1 ? 's' : ''} you</h2>
       <p>${total != null ? total - f.open : '–'} of ${total ?? '–'} connections are routed and checked. What is left is marked in red on the board.</p>${rows.join('')}
       <div class="acts"><button class="primary" id="again">Try again</button><button id="dl">Download and finish in KiCad</button><button id="replay">Replay</button></div>`;
     v.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => { const p = pairs[+b.dataset.pair], [ax, az] = P(p[0], p[1]), [bx, bz] = P(p[2], p[3]);
-      flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .45, Math.hypot(bx - ax, bz - az) * 2.2)); });
+      highlight(blocks[+b.dataset.pair].objs);
+      flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .7, Math.hypot(bx - ax, bz - az) * 2.6)); });
+    explainStuck(pairs, blocks, pairs.map(p => [desc(p[4]), desc(p[5])]));
     v.querySelectorAll('[data-viol]').forEach(b => b.onclick = () => { const p = viols[+b.dataset.viol], [x, z] = P(p[0], p[1]); flyTo(x, 0, z, SPAN * .45); });
   }
   if (lastState.recorded) v.insertAdjacentHTML('beforeend', '<p style="margin-top:12px;font-size:12px;color:var(--ink3)">This run is saved for replay.</p>');
@@ -420,7 +473,7 @@ function verdict() {
   $('replay').onclick = replay;
 }
 function clearCopper() {
-  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0;
+  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0; lit = [];
   for (const a of agents.values()) { a.queue = []; a.burst = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
 }
 async function replay() {
@@ -444,8 +497,10 @@ async function poll() {
   if (busy) return; busy = true;
   try {
     const s = lastState = await (await fetch('/state')).json();
-    show('dummy', !!(s.dummy && s.board));
-    if (s.epoch !== epoch) { epoch = s.epoch; attempt = s.attempt; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
+    show('dummy', !!(s.dummy && s.board && phase !== 'import'));
+    // a freshly opened page always starts on Import, even if the server still holds a board from earlier
+    if (epoch === -1) { epoch = s.epoch; attempt = s.attempt; }
+    else if (s.epoch !== epoch) { epoch = s.epoch; attempt = s.attempt; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
     if (s.board && phase !== 'assembling' && phase !== 'import') {
       if (attempt === -1) attempt = s.attempt;
       else if (s.attempt !== attempt) { attempt = s.attempt; clearCopper(); heavy = heavy.slice(0, 1); applied = 0; outcome = '';
