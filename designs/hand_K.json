@@ -1,0 +1,68 @@
+{
+ "name": "hand_K",
+ "note": "hand-sized reference (designer steps A-K, 11 evaluations = 165 decks); passes DEFAULT_SPEC at 15 PVT on full lib",
+ "params": {
+  "W_in": 3e-05,
+  "L_in": 3e-07,
+  "W_load": 2e-05,
+  "L_load": 1.4e-06,
+  "W_tail": 2e-06,
+  "W_drv": 4.5e-05,
+  "L_drv": 1e-06,
+  "W_sink": 4e-06,
+  "Ibias": 2e-05,
+  "Cc": 1e-12,
+  "Rz": 3000.0
+ },
+ "spec": {
+  "pm_deg": [
+   ">=",
+   60.0
+  ],
+  "ugf_hz": [
+   ">=",
+   10000000.0
+  ],
+  "dc_gain_db": [
+   ">=",
+   60.0
+  ],
+  "i_core_a": [
+   "<=",
+   0.0001
+  ]
+ },
+ "passed_full_lib": true,
+ "worst": {
+  "pm_deg": [
+   66.877,
+   "fs",
+   125
+  ],
+  "ugf_hz": [
+   18491000.0,
+   "ss",
+   125
+  ],
+  "dc_gain_db": [
+   62.015,
+   "fs",
+   125
+  ],
+  "i_core_a": [
+   6.61171e-05,
+   "ff",
+   125
+  ],
+  "min_sat_margin_v": [
+   0.0020919999999999966,
+   "fs",
+   -40
+  ],
+  "gain_margin_db": [
+   20.7898,
+   "ff",
+   125
+  ]
+ }
+}

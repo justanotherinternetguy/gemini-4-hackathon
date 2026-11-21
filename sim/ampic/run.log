@@ -1,0 +1,134 @@
+Note: Starting dynamic gmin stepping
+Note: Dynamic gmin stepping completed
+
+Note: Compatibility modes selected: hs a
+
+
+Circuit: * sim_opamp_2stg_diff_classa_stb
+
+option SCALE: Scale is set to 1e-06 for instance and model parameters
+option SCALE: Scale is set to 1e-06 for instance and model parameters
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+Using SPARSE 1.3 as Direct Linear Solver
+
+No. of Data Rows : 1
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi1.xi6.xpm2.msky13 m.xi1.xi6.xnm4.msky13 m.xi1.xi6.xnm5.msky13
+      model xi1.xi6.xpm2:plowvt_m xi1.xi6.xnm4:nlowvt_m xi1.xi6.xnm5:nlowvt_m
+         id            5.7991e-05            5.7991e-05            5.7991e-05
+        vgs              0.581391              0.626444              0.633184
+        vds               0.89938              0.135407              0.763807
+        vth              0.458268              0.549883              0.575549
+      vdsat              0.146985             0.0990169             0.0909826
+         gm           0.000614534           0.000909596            0.00098071
+        gds           1.61393e-05           8.98615e-05           1.52844e-05
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi1.xi7.xnm3.msky13 m.xi1.xi7.xnm2.msky13 m.xi1.xi7.xnm0.msky13
+      model xi1.xi7.xnm3:nlowvt_m xi1.xi7.xnm2:nlowvt_m xi1.xi7.xnm0:nlowvt_m
+         id           3.77701e-05           3.77701e-05           1.89042e-05
+        vgs               0.62645              0.646477              0.647239
+        vds              0.122132              0.129623              0.958702
+        vth              0.549882              0.573183               0.59565
+      vdsat             0.0990206             0.0993139             0.0893152
+         gm           0.000585435           0.000594946           0.000323005
+        gds           7.59286e-05           6.56786e-05           4.64229e-06
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi1.xi7.xnm1.msky13 m.xi1.xi7.xpm1.msky13 m.xi1.xi7.xpm0.msky13
+      model xi1.xi7.xnm1:nlowvt_m xi1.xi7.xpm1:plowvt_m xi1.xi7.xpm0:plowvt_m
+         id           1.88658e-05           1.89042e-05           1.88658e-05
+        vgs              0.647026               0.58788               0.58788
+        vds              0.965187              0.587681              0.581197
+        vth              0.595649              0.458267              0.458267
+      vdsat             0.0892048              0.151436              0.151437
+         gm           0.000322507           0.000202053           0.000201766
+        gds           4.62443e-06           5.92846e-06           5.94352e-06
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi2.xpm1.msky130_fd m.xi2.xpm2.msky130_fd m.xi2.xpm0.msky130_fd
+      model xi2.xpm1:plowvt_model xi2.xpm2:plowvt_model xi2.xpm0:plowvt_model
+         id           1.92181e-05           1.93534e-05           1.80239e-05
+        vgs              0.593057              0.835231              0.593069
+        vds              0.469528              0.835027              0.313793
+        vth              0.458268              0.453228              0.458265
+      vdsat              0.155025              0.309842              0.155036
+         gm           0.000204175           0.000110089           0.000193012
+        gds           6.65897e-06            4.9128e-07           9.57282e-06
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi2.xpm3.msky130_fd m.xi2.xpm4.msky130_fd m.xi2.xnm1.msky130_fd
+      model xi2.xpm3:plowvt_model xi2.xpm4:plowvt_model xi2.xnm1:nlowvt_model
+         id           1.94276e-05           1.94276e-05           1.92181e-05
+        vgs              0.610369              0.639011               0.63684
+        vds              0.195809              0.413945              0.493945
+        vth              0.458269              0.510857              0.574906
+      vdsat              0.167244              0.154099             0.0932233
+         gm           0.000189558           0.000212605           0.000324448
+        gds             2.984e-05           7.58738e-06            6.1659e-06
+Note: Starting dynamic gmin stepping
+Note: Dynamic gmin stepping completed
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi2.xnm3.msky130_fd m.xi2.xnm5.msky130_fd m.xi2.xnm2.msky130_fd
+      model xi2.xnm3:nlowvt_model xi2.xnm5:nlowvt_model xi2.xnm2:nlowvt_model
+         id           1.93534e-05           1.94276e-05           1.92181e-05
+        vgs              0.632405              0.629831              0.626446
+        vds               0.82738               1.04967              0.131756
+        vth              0.575686              0.576135              0.549883
+      vdsat             0.0905104             0.0889639             0.0990178
+         gm            0.00032727           0.000328264           0.000300592
+        gds           4.94832e-06           4.56662e-06           3.18508e-05
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi2.xnm4.msky130_fd m.xi2.xnm6.msky130_fd m.xi2.xnm0.msky130_fd
+      model xi2.xnm4:nlowvt_model xi2.xnm6:nlowvt_model xi2.xnm0:nlowvt_model
+         id           1.93534e-05           1.94276e-05           1.80239e-05
+        vgs              0.626444              0.626443              0.769108
+        vds              0.136185              0.138757              0.768875
+        vth              0.549883              0.549883              0.443495
+      vdsat             0.0990167             0.0990161              0.281614
+         gm            0.00030373           0.000305431           0.000104187
+        gds           2.95754e-05           2.83844e-05           6.90864e-07
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi2.xnm9.msky130_fd m.xi2.xnm11.msky130_f m.xi0.xpm0.msky130_fd
+      model xi2.xnm9:nlowvt_model xi2.xnm11:nlowvt_mode xi0.xpm0:plowvt_model
+         id           1.80239e-05           1.92181e-05                 2e-05
+        vgs              0.716254              0.703125              0.593048
+        vds              0.716021              0.702876              0.592838
+        vth              0.669161              0.650939               0.45827
+      vdsat             0.0915375             0.0932268              0.155017
+         gm            0.00031587           0.000330385            0.00021015
+        gds           5.09457e-06           5.36357e-06           6.14727e-06
+
+ BSIM4v5: Berkeley Short Channel IGFET Model-4
+     device m.xi0.xnm0.msky130_fd
+      model xi0.xnm0:nlowvt_model
+         id                 2e-05
+        vgs              0.614632
+        vds              0.614373
+        vth              0.549877
+      vdsat             0.0925814
+         gm           0.000332891
+        gds           5.67961e-06
+
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+Using SPARSE 1.3 as Direct Linear Solver
+ Reference value :  1.00000e+01Note: Starting dynamic gmin stepping
+Note: Dynamic gmin stepping completed
+
+No. of Data Rows : 451
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+Using SPARSE 1.3 as Direct Linear Solver
+
+No. of Data Rows : 451
+ugf                 =  1.25432e+08
+pm_raw              =  -1.48470e+02
+dcgain_db           =  6.05933e+01
+f180                =  2.57758e+08
+gm_db               =  -1.10227e+01
+Note: Simulation executed from .control section 
