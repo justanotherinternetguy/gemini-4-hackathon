@@ -64,7 +64,8 @@
   .agents { margin:14px 0 0; } .agent { display:flex; align-items:center; gap:8px; padding:3px 0; }
   .agent i { width:9px; height:9px; border-radius:50%; flex:none; } .agent b { font-weight:600; min-width:48px; }
   .agent span { color:var(--ink3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .agent.busy span { color:var(--ink); }
-  .log { font:11.5px/1.7 var(--mono); color:var(--ink2); max-height:150px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+  .log { font:11.5px/1.7 var(--mono); color:var(--ink2); max-height:190px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+  .log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .res h2 { margin:0 0 4px; font-size:19px; font-weight:680; } .res.pass h2 { color:var(--good); } .res.need h2 { color:var(--warn); }
   .res p { margin:0 0 10px; color:var(--ink2); }
   .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:center; gap:8px; }
@@ -289,16 +290,27 @@ function agent(name) {
   marker.add(orb, beam); marker.visible = false; world.add(marker);
   const tip = document.createElement('div'); tip.className = 'tip'; tip.style.background = color; tip.textContent = key; tip.style.display = 'none'; $('tips').append(tip);
   const el = document.createElement('div'); el.className = 'agent'; el.innerHTML = `<i style="background:${color}"></i><b></b><span>idle</span>`; el.children[1].textContent = key; $('agents').append(el);
-  const a = { name: key, color: c3, queue: [], job: null, marker, orb, beam, tip, el, done: 0 }; agents.set(key, a); return a;
+  const a = { name: key, color: c3, queue: [], burst: [], job: null, marker, orb, beam, tip, el, done: 0 }; agents.set(key, a); return a;
 }
 const say = (a, text, busy) => { a.el.lastChild.textContent = text; a.el.classList.toggle('busy', !!busy); };
 let solverEvents = 0;
-const VERB = { done: 'connected', connected: 'connected', start: 'started', started: 'started', fail: 'gave up on', failed: 'gave up on', retry: 'retrying', rip: 'removed', removed: 'removed' };
+function eventLine(e) {
+  const who = e.agent ? e.agent + ' ' : '';
+  switch (e.type) {
+    case 'note': return who + (e.text || '');
+    case 'round': return 'round ' + (e.n ?? '');
+    case 'start': return who + 'started ' + (e.net || '');
+    case 'attempt': return who + `attempt: ${e.open ?? '?'} open, ${e.errors ?? '?'} errors` + (e.best ? '  ← best so far' : '');
+    case 'done': return who + 'connected ' + (e.net || '');
+    case 'fail': return who + 'gave up on ' + (e.net || '') + (e.reason ? ': ' + e.reason : '');
+    default: return who + (e.type || '') + (e.net ? ' ' + e.net : '');
+  }
+}
 function showEvents(evs) {
   if (!evs || evs.length === solverEvents) return; solverEvents = evs.length;
   $('log').innerHTML = '';
-  for (const e of evs.slice(-9)) { const row = document.createElement('div');
-    row.textContent = [mmss(e.t || 0) + ' ', e.agent || '', VERB[e.type] || e.type || '', e.net || '', e.note || e.reason || ''].filter(Boolean).join(' '); $('log').prepend(row); }
+  for (const e of evs.slice(-10)) { const row = document.createElement('div'); row.textContent = mmss(e.t || 0) + '  ' + eventLine(e);
+    if (e.type === 'attempt' && e.best) row.style.color = 'var(--good)'; if (e.type === 'fail') row.style.color = 'var(--bad)'; $('log').prepend(row); }
 }
 function log(t, text) { if (solverEvents) return; const row = document.createElement('div'); row.textContent = mmss(t) + '  ' + text; $('log').prepend(row); while ($('log').children.length > 9) $('log').lastChild.remove(); }
 function chain(segs) {
@@ -321,8 +333,10 @@ function applyVersion(i, h) {
     const path = chain(segs).map(s => { const o = makeSeg(s, a.color); copper.set(s.k, o); return o; });
     const vias = freshVias.filter(v => v.net === net).map(v => { const o = makeVia(v, a.color); copper.set(v.k, o); return o; });
     const len = path.reduce((n, o) => n + o.len, 0);
-    a.queue.push({ net, path, vias, len, dur: Math.min(2.6, Math.max(.55, len / 38)), t: 0, frame: i });
+    const job = { net, path, vias, len, dur: Math.min(2.6, Math.max(.55, len / 38)), t: 0, frame: i };
+    if (byNet.size > 6) { job.dur = 1.1; job.t = -1.6 * a.burst.length / byNet.size; a.burst.push(job); } else a.queue.push(job);
   }
+  if (byNet.size > 6) say(a, `laying ${byNet.size} connections`, true);
   for (const v of freshVias.filter(v => !byNet.has(v.net))) { const o = makeVia(v, a.color); copper.set(v.k, o); a.queue.push({ net: v.net, path: [], vias: [o], len: 1, dur: .4, t: 0, frame: i }); }
   if (!fresh.length && !freshVias.length) showStats(i);
 }
@@ -340,7 +354,7 @@ function showStats(i) {
   heavy[i] = heavy[i]?.open_pairs ? heavy[i] : null;
   getHeavy(i).then(h => { if (statsFor === i) { setWeb(h.open_pairs); setViolations(h.viol_pts); } });
 }
-const idle = () => [...agents.values()].every(a => !a.job && !a.queue.length);
+const idle = () => [...agents.values()].every(a => !a.job && !a.queue.length && !a.burst.length);
 
 // ---------- phases ----------
 function setPhase(p) {
@@ -379,8 +393,9 @@ function verdict() {
   } else {
     v.className = 'res need';
     const pairs = h.open_pairs || [], viols = h.viol_pts || [];
+    const why = {}; for (const l of (lastState.result?.left || [])) if (l && l.net && l.reason) why[l.net] = l.reason;
     const rows = pairs.map((p, i) => { const a = desc(p[4]), b = desc(p[5]);
-      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · not connected</small></span><button class="small" data-pair="${i}">Show</button></div>`; })
+      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · ${why[a.net] || why[b.net] ? esc(why[a.net] || why[b.net]) : 'not connected'}</small></span><button class="small" data-pair="${i}">Show</button></div>`; })
       .concat(viols.map((p, i) => `<div class="todo"><span><b>${esc(p[2])}</b><small>${esc(desc(p[3]).part)} · rule violation</small></span><button class="small" data-viol="${i}">Show</button></div>`));
     const head = [f.open ? `${f.open} connection${f.open === 1 ? '' : 's'}` : '', f.violations ? `${f.violations} rule violation${f.violations === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
     v.innerHTML = `<h2>${head} need${(f.open + f.violations) === 1 ? 's' : ''} you</h2>
@@ -390,13 +405,14 @@ function verdict() {
       flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .45, Math.hypot(bx - ax, bz - az) * 2.2)); });
     v.querySelectorAll('[data-viol]').forEach(b => b.onclick = () => { const p = viols[+b.dataset.viol], [x, z] = P(p[0], p[1]); flyTo(x, 0, z, SPAN * .45); });
   }
+  if (lastState.recorded) v.insertAdjacentHTML('beforeend', '<p style="margin-top:12px;font-size:12px;color:var(--ink3)">This run is saved for replay.</p>');
   $('dl').onclick = () => { location.href = '/download'; };
   $('again').onclick = e => startRoute(e.shiftKey ? 3 : 0);
   $('replay').onclick = replay;
 }
 function clearCopper() {
   for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0;
-  for (const a of agents.values()) { a.queue = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
+  for (const a of agents.values()) { a.queue = []; a.burst = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
 }
 async function replay() {
   clearCopper(); showStats(0); statsFor = 0;
@@ -405,21 +421,24 @@ async function replay() {
 async function startRoute(leave) {
   const r = await post('/route', JSON.stringify({ leave }), { 'Content-Type': 'application/json' });
   if (!r.ok) { $('footmsg').textContent = r.error; return; }
-  clearCopper(); frames = frames.slice(0, 1); heavy = heavy.slice(0, 1); applied = 0; routeT0 = performance.now(); outcome = '';
+  attempt = -1; clearCopper(); frames = frames.slice(0, 1); heavy = heavy.slice(0, 1); applied = 0; routeT0 = performance.now(); outcome = '';
   setPhase('routing'); showStats(0);
 }
 $('route').onclick = e => startRoute(e.shiftKey ? 3 : 0);
 $('stop').onclick = () => post('/stop', '{}', { 'Content-Type': 'application/json' });
 
 // ---------- polling ----------
-let busy = false;
+let busy = false, attempt = null;
 async function poll() {
   if (busy) return; busy = true;
   try {
     const s = lastState = await (await fetch('/state')).json();
     show('dummy', !!(s.dummy && s.board));
-    if (s.epoch !== epoch) { epoch = s.epoch; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
+    if (s.epoch !== epoch) { epoch = s.epoch; attempt = s.attempt; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
     if (s.board && phase !== 'assembling' && phase !== 'import') {
+      if (attempt === -1) attempt = s.attempt;
+      else if (s.attempt !== attempt) { attempt = s.attempt; clearCopper(); heavy = heavy.slice(0, 1); applied = 0; outcome = '';
+        routeT0 = performance.now(); frames = s.frames; setPhase('routing'); showStats(0); }
       frames = s.frames;
       if (frames[0]?.checked && total == null) { total = frames[0].open; $('i-conns').textContent = total; if (phase === 'ready') setPhase('ready'); }
       if (phase === 'ready' && frames[0]?.checked && !webShown) { webShown = 1; applied = 0; setWeb((await getHeavy(0)).open_pairs); }
@@ -471,6 +490,14 @@ function tick() {
     m.material.depthWrite = m.material.opacity > .9; m.castShadow = m.material.opacity > .6; }
   if (boardMesh && phase !== 'assembling' && phase !== 'import') { boardMesh.material.opacity += (.62 - boardMesh.material.opacity) * Math.min(1, dt * 3); boardMesh.material.depthWrite = false; }
   for (const a of agents.values()) {
+    if (a.burst.length) {                           // many connections from one version: all drawn together, quickly
+      for (const j of a.burst) { j.t += dt / j.dur; const t = Math.min(1, Math.max(0, j.t)); let run = t * j.len;
+        for (const o of j.path) { o.set(o.len ? Math.min(1, Math.max(0, run / o.len)) : 1); run -= o.len; } for (const o of j.vias) o.set(t); }
+      const fin = a.burst.filter(j => j.t >= 1);
+      if (fin.length) { for (const j of fin) for (const o of [...j.path, ...j.vias]) settle.push({ m: o.m, to: new THREE.Color(COPPER[o.side] ?? COPPER.front), t: 0 });
+        a.done += fin.length; const fr = fin[0].frame; a.burst = a.burst.filter(j => j.t < 1);
+        if (!a.burst.length) { say(a, a.done + ' laid · idle'); showStats(idle() ? applied : fr); } }
+    }
     if (!a.job && a.queue.length) { a.job = a.queue.shift(); say(a, 'routing ' + (nets[a.job.net] || 'net ' + a.job.net), true); }
     const j = a.job; if (!j) { a.marker.visible = false; a.tip.style.display = 'none'; continue; }
     j.t += dt / j.dur; const t = Math.min(1, j.t); let run = t * j.len, tipPos = null;
