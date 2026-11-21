@@ -389,21 +389,28 @@ function closeUp(pair, objs) {                      // a top-down picture of the
   camera.position.copy(keepPos); camera.lookAt(keepTarget); highlight(keepLit); return url;
 }
 async function explainStuck(pairs, blocks, descs) {
-  for (let i = 0; i < Math.min(pairs.length, 6); i++) {
+  // close-ups are taken one after another (they move the camera), then the model calls run side by side
+  const n = Math.min(pairs.length, 3), shots = [];
+  for (let i = 0; i < n; i++) shots.push(closeUp(pairs[i], blocks[i].objs));
+  const modelName = m => ({ 'gemini-4-neon': 'Gemini 4 Neon', 'gemini-4-hydrogen': 'Gemini 4 Hydrogen', 'gemini-4-carbon': 'Gemini 4 Carbon', 'gemini-4-argon': 'Gemini 4 Argon' }[m] || 'Gemini');
+  await Promise.all(shots.map(async (image, i) => {
     const box = document.querySelector(`[data-ai="${i}"]`); if (!box) return;
-    let r; try { const res = await fetch('/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    box.innerHTML = '<small class="ai" style="color:var(--ink3)">Asking Gemini why this one is stuck…</small>';
+    let r = null; try { const res = await fetch('/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         board: lastState.board, from: descs[i][0].part, to: descs[i][1].part, net: descs[i][0].net || descs[i][1].net,
-        blockers: blocks[i].text, pair: pairs[i].slice(0, 4), image: closeUp(pairs[i], blocks[i].objs) }) });
-      if (!res.ok) return; r = await res.json(); } catch (e) { return; }
-    if (!document.body.contains(box) || !r || !r.text) continue;
-    box.innerHTML = `<small class="ai"><b>Suggested by Gemini:</b> ${esc(r.text)}</small>` +
-      (r.offer ? `<button class="small offer" data-fix="${i}">Let the agents fix it</button><small class="ai">Gemini rates this fixable by the agents${r.confidence != null ? ' (' + Math.round(r.confidence * 100) + '% confident)' : ''}.</small>`
-               : (r.offer === false ? `<small class="ai">Gemini rates this one as needing you${r.confidence != null ? ' (' + Math.round(r.confidence * 100) + '% confident)' : ''}.</small>` : ''));
+        blockers: blocks[i].text, pair: pairs[i].slice(0, 4), image }) }); if (res.ok) r = await res.json(); } catch (e) {}
+    if (!document.body.contains(box)) return;
+    if (!r || !r.text) { box.innerHTML = ''; return; }
+    const pct = r.confidence != null ? ` (${Math.round(r.confidence * 100)}% confident)` : '';
+    const rating = r.offer === true ? `The Decisions API rates this fixable by the agents moving one track${pct}.`
+                 : r.offer === false ? `The Decisions API rates this one as needing you${pct}.` : '';
+    box.innerHTML = `<small class="ai"><b>Suggested by ${esc(modelName(r.model))}:</b> ${esc(r.text)}</small>` + (rating ? `<small class="ai">${rating}</small>` : '') +
+      (r.offer === true && r.retry_available ? `<button class="small offer" data-fix="${i}">Let the agents fix it</button>` : '');
     const fix = box.querySelector('[data-fix]');
     if (fix) fix.onclick = async () => { fix.disabled = true; fix.textContent = 'Starting…';
       const rr = await post('/retry', JSON.stringify({ net: descs[i][0].net || descs[i][1].net, pair: pairs[i].slice(0, 4), blockers: blocks[i].text }), { 'Content-Type': 'application/json' }).catch(() => ({ ok: false }));
-      if (!rr.ok) { fix.textContent = rr.error || 'Retry is not available'; } };
-  }
+      if (!rr.ok) fix.textContent = rr.error || 'Retry is not available'; };
+  }));
 }
 let lit = [];
 function highlight(objs) {
