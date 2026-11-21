@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>routr</title>
+<meta name="description" content="A swarm of Gemini AI agents that finishes electronics designs. Agents propose, a real checker decides.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Figtree:wght@400;600&family=Fredoka:wght@500;600&display=swap"><link rel="stylesheet" href="style.css">
+</head><body>
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html"><i></i><span>routr</span></a>
+  <div class="tabs"><a href="#swarm">The swarm</a><a href="#team">The team</a><a href="#how">How it works</a><a href="#tech">Under the hood</a><a href="#results">Results</a><a href="#watch">Watch</a><a href="evidence.html">Evidence</a></div>
+  <button class="themebtn" aria-label="Switch light or dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+</div></nav>
+
+<header class="hero simple" id="top">
+  <div class="wrap split"><div class="herotext">
+    <div class="eyebrow"><span class="dot" style="background:var(--sky)"></span>routr · Gemini 4 hackathon</div>
+    <h1>Agents that finish the <em>hardware</em> design.</h1>
+    <p class="lede">routr is a swarm of Gemini AI agents that finishes electronics designs where people and classic
+      tools get stuck. The agents come up with the ideas. A real engineering checker tests every one before it counts.</p>
+    <div class="cta"><a class="btn main" href="#swarm">See the swarm</a><a class="btn paper" href="#watch">Watch it work</a>
+      <a class="btn lilac" href="evidence.html">Full evidence</a></div>
+  </div><figure class="shot herogif"><img src="img/shots/studio_route.gif" alt="The routr studio routing a circuit board: the classic router lays copper, Gemini screens what blocks the last connection, repair plans run, and KiCad marks it ready to manufacture"><figcaption>A real run in the studio, 1.5× speed. The classic router leaves one open connection and one rule error. Gemini’s Decisions API reads a picture of the board and names what is in the way, six repair plans run in parallel, and KiCad’s rule checker passes the board.</figcaption></figure></div>
+</header>
+
+<section class="band alt" id="swarm">
+  <div class="wrap">
+    <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--sky)"></span>The swarm</div>
+      <h2>Every dot is ten real calls to Gemini.</h2>
+      <p class="lede">A stuck design goes in. Hundreds of agent calls attack it from every side. Only the ideas that pass the
+        checker come out.</p></div></div>
+    <div class="swarmfig">
+      <svg class="swarm" viewBox="0 0 1200 460" role="img" aria-label="A stuck design goes into a swarm of
+ 136 dots, one per ten Gemini calls; ideas leave the swarm for a checker, and only checked ones become the finished design.">
+  <g class="stuck">
+    <rect x="30" y="140" width="190" height="180" rx="18" class="board"/>
+    <rect x="58" y="172" width="34" height="22" rx="4" class="s-part"/><rect x="150" y="262" width="40" height="26" rx="4" class="s-part"/>
+    <rect x="140" y="170" width="44" height="30" rx="4" class="s-part"/><rect x="60" y="262" width="30" height="24" rx="4" class="s-part"/>
+    <path d="M92 183 H140" class="wire"/><path d="M75 262 V194" class="wire"/>
+    <path d="M90 274 C120 230 150 230 162 200" class="s-open"/><path d="M190 275 C205 240 200 215 184 190" class="s-open"/>
+  </g>
+  <path d="M240 230 H370" class="s-flow"/><path d="M362 222 L374 230 L362 238" class="s-head"/>
+  <ellipse cx="600" cy="230" rx="240" ry="196" class="cloud"/>
+  <circle class="s-dot sky" cx="621.3" cy="360.4" r="7" style="animation-delay:-4.92s;animation-duration:7.46s"/><circle class="s-dot sky" cx="504.7" cy="201.2" r="7" style="animation-delay:-2.15s;animation-duration:7.54s"/><circle class="s-dot sky" cx="460.8" cy="138.9" r="7" style="animation-delay:-1.40s;animation-duration:5.94s"/><circle class="s-dot sky" cx="638.3" cy="149.3" r="7" style="animation-delay:-0.02s;animation-duration:5.68s"/><circle class="s-dot sky" cx="543.8" cy="252.6" r="7" style="animation-delay:-5.72s;animation-duration:6.76s"/><circle class="s-dot sky" cx="606.7" cy="270.0" r="7" style="animation-delay:-4.06s;animation-duration:4.22s"/><circle class="s-dot sky" cx="771.8" cy="325.2" r="7" style="animation-delay:-5.25s;animation-duration:7.19s"/><circle class="s-dot coral" cx="553.7" cy="195.7" r="9" style="animation-delay:-0.62s;animation-duration:6.54s"/><circle class="s-dot sky" cx="474.8" cy="115.2" r="7" style="animation-delay:-2.04s;animation-duration:4.21s"/><circle class="s-dot sky" cx="428.6" cy="183.6" r="7" style="animation-delay:-0.15s;animation-duration:7.50s"/><circle class="s-dot sky" cx="649.0" cy="110.5" r="7" style="animation-delay:-1.51s;animation-duration:5.39s"/><circle class="s-dot sky" cx="541.6" cy="101.8" r="7" style="animation-delay:-5.09s;animation-duration:7.97s"/><circle class="s-dot sky" cx="585.4" cy="224.5" r="7" style="animation-delay:-0.52s;animation-duration:4.41s"/><circle class="s-dot sky" cx="532.3" cy="150.0" r="7" style="animation-delay:-4.97s;animation-duration:4.65s"/><circle class="s-dot sky" cx="612.2" cy="109.8" r="7" style="animation-delay:-3.26s;animation-duration:4.11s"/><circle class="s-dot sky" cx="612.1" cy="392.7" r="7" style="animation-delay:-5.18s;animation-duration:6.78s"/><circle class="s-dot sky" cx="497.3" cy="184.7" r="7" style="animation-delay:-1.00s;animation-duration:7.09s"/><circle class="s-dot sky" cx="614.0" cy="324.9" r="7" style="animation-delay:-1.98s;animation-duration:4.89s"/><circle class="s-dot sky" cx="751.6" cy="334.1" r="7" style="animation-delay:-4.91s;animation-duration:6.96s"/><circle class="s-dot sky" cx="482.5" cy="236.0" r="7" style="animation-delay:-2.13s;animation-duration:4.12s"/><circle class="s-dot lilac" cx="496.4" cy="295.5" r="9" style="animation-delay:-5.74s;animation-duration:5.79s"/><circle class="s-dot sky" cx="795.7" cy="184.0" r="7" style="animation-delay:-1.32s;animation-duration:4.91s"/><circle class="s-dot sky" cx="469.6" cy="129.5" r="7" style="animation-delay:-3.74s;animation-duration:7.60s"/><circle class="s-dot sky" cx="746.4" cy="223.0" r="7" style="animation-delay:-3.92s;animation-duration:7.20s"/><circle class="s-dot butter" cx="421.5" cy="284.6" r="9" style="animation-delay:-5.46s;animation-duration:7.13s"/><circle class="s-dot sky" cx="707.6" cy="222.5" r="7" style="animation-delay:-1.07s;animation-duration:7.16s"/><circle class="s-dot sky" cx="528.0" cy="332.3" r="7" style="animation-delay:-5.83s;animation-duration:5.58s"/><circle class="s-dot sky" cx="557.6" cy="381.9" r="7" style="animation-delay:-4.35s;animation-duration:4.68s"/><circle class="s-dot sky" cx="447.9" cy="341.0" r="7" style="animation-delay:-5.88s;animation-duration:6.63s"/><circle class="s-dot sky" cx="535.7" cy="246.5" r="7" style="animation-delay:-0.79s;animation-duration:4.06s"/><circle class="s-dot sky" cx="802.5" cy="280.9" r="7" style="animation-delay:-3.16s;animation-duration:7.73s"/><circle class="s-dot sky" cx="571.5" cy="356.4" r="7" style="animation-delay:-4.96s;animation-duration:4.84s"/><circle class="s-dot sky" cx="493.3" cy="159.6" r="7" style="animation-delay:-1.44s;animation-duration:6.35s"/><circle class="s-dot lilac" cx="496.5" cy="202.5" r="9" style="animation-delay:-0.79s;animation-duration:7.64s"/><circle class="s-dot coral" cx="537.1" cy="215.8" r="9" style="animation-delay:-3.50s;animation-duration:7.62s"/><circle class="s-dot sky" cx="565.9" cy="372.0" r="7" style="animation-delay:-3.01s;animation-duration:6.13s"/><circle class="s-dot sky" cx="610.1" cy="66.4" r="7" style="animation-delay:-2.64s;animation-duration:4.73s"/><circle class="s-dot sky" cx="459.1" cy="221.0" r="7" style="animation-delay:-4.35s;animation-duration:6.23s"/><circle class="s-dot sky" cx="525.2" cy="236.2" r="7" style="animation-delay:-3.33s;animation-duration:7.14s"/><circle class="s-dot sky" cx="430.6" cy="250.5" r="7" style="animation-delay:-1.49s;animation-duration:5.11s"/><circle class="s-dot sky" cx="717.1" cy="232.6" r="7" style="animation-delay:-3.37s;animation-duration:7.04s"/><circle class="s-dot sky" cx="777.4" cy="210.7" r="7" style="animation-delay:-3.68s;animation-duration:6.02s"/><circle class="s-dot sky" cx="605.2" cy="295.5" r="7" style="animation-delay:-2.71s;animation-duration:6.13s"/><circle class="s-dot sky" cx="590.6" cy="380.1" r="7" style="animation-delay:-4.20s;animation-duration:7.51s"/><circle class="s-dot sky" cx="625.6" cy="380.7" r="7" style="animation-delay:-5.04s;animation-duration:4.55s"/><circle class="s-dot sky" cx="437.3" cy="210.3" r="7" style="animation-delay:-0.44s;animation-duration:4.96s"/><circle class="s-dot sky" cx="416.4" cy="287.6" r="7" style="animation-delay:-4.70s;animation-duration:7.59s"/><circle class="s-dot sky" cx="451.4" cy="303.5" r="7" style="animation-delay:-3.96s;animation-duration:4.57s"/><circle class="s-dot sky" cx="556.3" cy="225.7" r="7" style="animation-delay:-5.94s;animation-duration:7.33s"/><circle class="s-dot lilac" cx="454.4" cy="206.7" r="9" style="animation-delay:-3.09s;animation-duration:5.36s"/><circle class="s-dot sky" cx="469.2" cy="168.3" r="7" style="animation-delay:-4.33s;animation-duration:4.08s"/><circle class="s-dot sky" cx="623.2" cy="209.8" r="7" style="animation-delay:-0.11s;animation-duration:5.33s"/><circle class="s-dot sky" cx="653.3" cy="234.2" r="7" style="animation-delay:-0.39s;animation-duration:7.94s"/><circle class="s-dot sky" cx="430.1" cy="150.3" r="7" style="animation-delay:-0.24s;animation-duration:7.12s"/><circle class="s-dot sky" cx="501.3" cy="104.0" r="7" style="animation-delay:-2.53s;animation-duration:7.65s"/><circle class="s-dot sky" cx="737.2" cy="147.9" r="7" style="animation-delay:-0.90s;animation-duration:7.68s"/><circle class="s-dot sky" cx="630.4" cy="298.1" r="7" style="animation-delay:-0.54s;animation-duration:4.23s"/><circle class="s-dot sky" cx="680.9" cy="204.6" r="7" style="animation-delay:-0.43s;animation-duration:7.75s"/><circle class="s-dot lilac" cx="657.8" cy="332.6" r="9" style="animation-delay:-0.50s;animation-duration:7.42s"/><circle class="s-dot sky" cx="580.1" cy="175.3" r="7" style="animation-delay:-3.32s;animation-duration:7.71s"/><circle class="s-dot sky" cx="500.2" cy="103.9" r="7" style="animation-delay:-3.16s;animation-duration:4.95s"/><circle class="s-dot sky" cx="519.2" cy="163.7" r="7" style="animation-delay:-4.56s;animation-duration:5.16s"/><circle class="s-dot butter" cx="600.0" cy="120.5" r="9" style="animation-delay:-2.08s;animation-duration:4.07s"/><circle class="s-dot sky" cx="700.2" cy="247.4" r="7" style="animation-delay:-1.14s;animation-duration:5.90s"/><circle class="s-dot sky" cx="737.1" cy="206.9" r="7" style="animation-delay:-2.97s;animation-duration:7.34s"/><circle class="s-dot sky" cx="554.0" cy="232.3" r="7" style="animation-delay:-4.13s;animation-duration:7.93s"/><circle class="s-dot sky" cx="532.4" cy="343.0" r="7" style="animation-delay:-4.24s;animation-duration:6.54s"/><circle class="s-dot sky" cx="559.0" cy="178.2" r="7" style="animation-delay:-0.33s;animation-duration:4.52s"/><circle class="s-dot sky" cx="415.4" cy="311.9" r="7" style="animation-delay:-1.53s;animation-duration:4.65s"/><circle class="s-dot sky" cx="759.3" cy="288.0" r="7" style="animation-delay:-1.69s;animation-duration:4.97s"/><circle class="s-dot coral" cx="511.0" cy="216.2" r="9" style="animation-delay:-0.95s;animation-duration:5.78s"/><circle class="s-dot sky" cx="803.2" cy="246.0" r="7" style="animation-delay:-1.47s;animation-duration:7.86s"/><circle class="s-dot sky" cx="518.1" cy="181.2" r="7" style="animation-delay:-0.01s;animation-duration:5.53s"/><circle class="s-dot sky" cx="589.1" cy="230.9" r="7" style="animation-delay:-1.21s;animation-duration:6.02s"/><circle class="s-dot sky" cx="423.6" cy="195.8" r="7" style="animation-delay:-0.25s;animation-duration:4.09s"/><circle class="s-dot lilac" cx="515.8" cy="139.2" r="9" style="animation-delay:-3.51s;animation-duration:6.12s"/><circle class="s-dot sky" cx="707.7" cy="283.6" r="7" style="animation-delay:-4.30s;animation-duration:7.52s"/><circle class="s-dot sky" cx="552.5" cy="170.9" r="7" style="animation-delay:-5.91s;animation-duration:4.60s"/><circle class="s-dot sky" cx="696.4" cy="278.7" r="7" style="animation-delay:-0.26s;animation-duration:7.34s"/><circle class="s-dot sky" cx="768.5" cy="273.3" r="7" style="animation-delay:-4.40s;animation-duration:7.25s"/><circle class="s-dot sky" cx="444.9" cy="238.1" r="7" style="animation-delay:-3.03s;animation-duration:7.34s"/><circle class="s-dot sky" cx="731.0" cy="341.0" r="7" style="animation-delay:-3.50s;animation-duration:7.57s"/><circle class="s-dot lilac" cx="678.6" cy="295.7" r="9" style="animation-delay:-1.38s;animation-duration:4.12s"/><circle class="s-dot lilac" cx="442.2" cy="182.6" r="9" style="animation-delay:-0.63s;animation-duration:7.34s"/><circle class="s-dot coral" cx="625.2" cy="273.4" r="9" style="animation-delay:-3.76s;animation-duration:6.72s"/><circle class="s-dot sky" cx="595.4" cy="61.1" r="7" style="animation-delay:-4.79s;animation-duration:6.99s"/><circle class="s-dot coral" cx="601.3" cy="242.0" r="9" style="animation-delay:-3.96s;animation-duration:4.26s"/><circle class="s-dot sky" cx="701.8" cy="145.7" r="7" style="animation-delay:-0.45s;animation-duration:5.06s"/><circle class="s-dot sky" cx="698.6" cy="129.8" r="7" style="animation-delay:-4.44s;animation-duration:7.90s"/><circle class="s-dot sky" cx="597.4" cy="190.1" r="7" style="animation-delay:-2.87s;animation-duration:6.73s"/><circle class="s-dot sky" cx="714.8" cy="269.8" r="7" style="animation-delay:-3.86s;animation-duration:4.31s"/><circle class="s-dot sky" cx="448.4" cy="146.3" r="7" style="animation-delay:-4.46s;animation-duration:5.22s"/><circle class="s-dot sky" cx="629.1" cy="64.2" r="7" style="animation-delay:-0.36s;animation-duration:5.08s"/><circle class="s-dot sky" cx="674.0" cy="295.3" r="7" style="animation-delay:-4.05s;animation-duration:5.16s"/><circle class="s-dot sky" cx="607.1" cy="218.0" r="7" style="animation-delay:-2.80s;animation-duration:4.47s"/><circle class="s-dot sky" cx="769.3" cy="127.7" r="7" style="animation-delay:-5.87s;animation-duration:7.75s"/><circle class="s-dot sky" cx="392.5" cy="216.1" r="7" style="animation-delay:-4.92s;animation-duration:7.87s"/><circle class="s-dot sky" cx="578.3" cy="151.3" r="7" style="animation-delay:-1.26s;animation-duration:7.78s"/><circle class="s-dot coral" cx="475.6" cy="257.7" r="9" style="animation-delay:-0.85s;animation-duration:6.10s"/><circle class="s-dot lilac" cx="737.7" cy="233.0" r="9" style="animation-delay:-5.32s;animation-duration:6.81s"/><circle class="s-dot sky" cx="484.5" cy="365.2" r="7" style="animation-delay:-2.92s;animation-duration:4.10s"/><circle class="s-dot sky" cx="386.5" cy="227.2" r="7" style="animation-delay:-2.70s;animation-duration:5.21s"/><circle class="s-dot sky" cx="445.5" cy="176.9" r="7" style="animation-delay:-1.90s;animation-duration:7.36s"/><circle class="s-dot sky" cx="783.4" cy="302.4" r="7" style="animation-delay:-5.41s;animation-duration:5.16s"/><circle class="s-dot sky" cx="545.1" cy="193.6" r="7" style="animation-delay:-5.99s;animation-duration:6.36s"/><circle class="s-dot sky" cx="540.1" cy="205.5" r="7" style="animation-delay:-1.65s;animation-duration:4.19s"/><circle class="s-dot sky" cx="507.8" cy="378.1" r="7" style="animation-delay:-1.50s;animation-duration:5.06s"/><circle class="s-dot sky" cx="604.7" cy="124.5" r="7" style="animation-delay:-2.24s;animation-duration:7.82s"/><circle class="s-dot sky" cx="765.2" cy="336.1" r="7" style="animation-delay:-3.79s;animation-duration:7.65s"/><circle class="s-dot sky" cx="789.5" cy="246.7" r="7" style="animation-delay:-4.32s;animation-duration:4.20s"/><circle class="s-dot sky" cx="699.9" cy="213.3" r="7" style="animation-delay:-4.52s;animation-duration:6.58s"/><circle class="s-dot sky" cx="508.1" cy="76.7" r="7" style="animation-delay:-5.56s;animation-duration:4.51s"/><circle class="s-dot sky" cx="588.0" cy="176.8" r="7" style="animation-delay:-1.79s;animation-duration:6.96s"/><circle class="s-dot sky" cx="667.1" cy="162.3" r="7" style="animation-delay:-3.34s;animation-duration:5.58s"/><circle class="s-dot sky" cx="457.0" cy="115.0" r="7" style="animation-delay:-1.25s;animation-duration:7.62s"/><circle class="s-dot sky" cx="598.7" cy="134.8" r="7" style="animation-delay:-5.44s;animation-duration:7.99s"/><circle class="s-dot sky" cx="578.5" cy="107.5" r="7" style="animation-delay:-1.15s;animation-duration:4.36s"/><circle class="s-dot sky" cx="532.0" cy="91.0" r="7" style="animation-delay:-1.43s;animation-duration:5.03s"/><circle class="s-dot butter" cx="629.9" cy="361.7" r="9" style="animation-delay:-4.50s;animation-duration:5.65s"/><circle class="s-dot sky" cx="563.0" cy="238.2" r="7" style="animation-delay:-2.26s;animation-duration:5.35s"/><circle class="s-dot lilac" cx="411.7" cy="154.4" r="9" style="animation-delay:-5.81s;animation-duration:4.50s"/><circle class="s-dot sky" cx="601.5" cy="274.1" r="7" style="animation-delay:-5.18s;animation-duration:4.86s"/><circle class="s-dot sky" cx="501.5" cy="144.5" r="7" style="animation-delay:-2.40s;animation-duration:5.78s"/><circle class="s-dot sky" cx="770.1" cy="220.9" r="7" style="animation-delay:-3.52s;animation-duration:4.00s"/><circle class="s-dot sky" cx="553.4" cy="375.1" r="7" style="animation-delay:-4.95s;animation-duration:7.42s"/><circle class="s-dot sky" cx="609.6" cy="291.9" r="7" style="animation-delay:-5.65s;animation-duration:6.89s"/><circle class="s-dot sky" cx="663.4" cy="320.0" r="7" style="animation-delay:-2.74s;animation-duration:6.21s"/><circle class="s-dot sky" cx="485.0" cy="372.8" r="7" style="animation-delay:-3.87s;animation-duration:5.22s"/><circle class="s-dot sky" cx="440.0" cy="145.6" r="7" style="animation-delay:-3.82s;animation-duration:6.79s"/><circle class="s-dot sky" cx="610.5" cy="258.2" r="7" style="animation-delay:-2.33s;animation-duration:4.89s"/><circle class="s-dot sky" cx="643.5" cy="63.6" r="7" style="animation-delay:-1.81s;animation-duration:5.84s"/><circle class="s-dot sky" cx="797.3" cy="279.2" r="7" style="animation-delay:-5.30s;animation-duration:5.90s"/><circle class="s-dot sky" cx="486.0" cy="144.0" r="7" style="animation-delay:-5.76s;animation-duration:6.82s"/><circle class="s-dot sky" cx="599.3" cy="289.3" r="7" style="animation-delay:-2.52s;animation-duration:5.03s"/><circle class="s-dot sky" cx="672.0" cy="374.6" r="7" style="animation-delay:-1.36s;animation-duration:4.14s"/><circle class="s-dot sky" cx="530.4" cy="203.0" r="7" style="animation-delay:-4.10s;animation-duration:4.79s"/>
+  <path d="M830 230 H930" class="s-flow"/>
+  <g class="gate"><rect x="940" y="150" width="34" height="160" rx="17"/><path d="M948 232 l7 8 l12 -16" class="tick"/></g>
+  <circle class="idea ok" r="6"><animateMotion dur="5s" begin="-0.00s" repeatCount="indefinite" path="M800,230 L948,230 L1110,230"/></circle><circle class="idea no" r="6"><animateMotion dur="5s" begin="-0.55s" repeatCount="indefinite" path="M800,230 L940,230 L880,300"/></circle><circle class="idea no" r="6"><animateMotion dur="5s" begin="-1.10s" repeatCount="indefinite" path="M800,230 L940,230 L880,300"/></circle><circle class="idea ok" r="6"><animateMotion dur="5s" begin="-1.65s" repeatCount="indefinite" path="M800,230 L948,230 L1110,230"/></circle><circle class="idea no" r="6"><animateMotion dur="5s" begin="-2.20s" repeatCount="indefinite" path="M800,230 L940,230 L880,300"/></circle><circle class="idea no" r="6"><animateMotion dur="5s" begin="-2.75s" repeatCount="indefinite" path="M800,230 L940,230 L880,300"/></circle><circle class="idea ok" r="6"><animateMotion dur="5s" begin="-3.30s" repeatCount="indefinite" path="M800,230 L948,230 L1110,230"/></circle><circle class="idea no" r="6"><animateMotion dur="5s" begin="-3.85s" repeatCount="indefinite" path="M800,230 L940,230 L880,300"/></circle><circle class="idea no" r="6"><animateMotion dur="5s" begin="-4.40s" repeatCount="indefinite" path="M800,230 L940,230 L880,300"/></circle>
+  <path d="M990 230 H1050" class="s-flow"/><path d="M1042 222 L1054 230 L1042 238" class="s-head"/>
+  <g class="done">
+    <rect x="1060" y="160" width="120" height="140" rx="16" class="board ok"/>
+    <path d="M1080 200 H1160 M1080 230 H1130 V270 M1160 200 V260 H1140" class="wire"/>
+    <circle cx="1150" cy="170" r="20" class="badge"/><path d="M1140 170 l7 7 l12 -14" class="tick"/>
+  </g>
+</svg>
+      <div class="swarmcap"><div><b>A stuck design</b><span>Wires no tool could connect. A chip circuit that fails when it gets hot.</span></div>
+        <div><b>The swarm</b><span><i class="key sky"></i><i class="key lilac"></i><i class="key butter"></i><i class="key coral"></i> workers, lead, reviewer, screener</span></div>
+        <div><b>The checker, then the result</b><span>Ideas that break a rule bounce back. Ideas that pass become the design.</span></div></div>
+    </div>
+    <div class="counts"><div class="count"><b>1,478</b><span>calls to Gemini models</span></div><div class="count"><b>7.5M</b><span>tokens read and written</span></div><div class="count"><b>15,765</b><span>circuit simulations run</span></div><div class="count"><b>463</b><span>board versions checked</span></div></div>
+    <p class="soft note">Counted from our own run logs when this page was built. Where a log did not record tokens,
+      none are counted, so these numbers are a minimum.</p>
+  </div>
+</section>
+
+<section class="band" id="team">
+  <div class="wrap">
+    <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--lilac)"></span>The team</div>
+      <h2>Five roles. One rule: nobody grades their own work.</h2></div></div>
+    <div class="team"><div class="member sky"><i class="avatar"></i><div><h4>The workers</h4><small>Gemini 4 Hydrogen</small><p>Fast agents that try fixes side by side, each with its own style: careful, bold, power-aware.</p></div></div><div class="member lilac"><i class="avatar"></i><div><h4>The lead</h4><small>Gemini 4 Carbon</small><p>Thinks the hardest. Reads every failure so far and sends each worker in a different direction.</p></div></div><div class="member butter"><i class="avatar"></i><div><h4>The reviewer</h4><small>Gemini 4 Neon</small><p>Looks at pictures (the board, the frequency plot) and points out what looks wrong.</p></div></div><div class="member coral"><i class="avatar"></i><div><h4>The screener</h4><small>Gemini Decisions API</small><p>Answers yes/no questions in about a second, with a confidence, so the team skips bad ideas.</p></div></div><div class="member mint"><i class="avatar"></i><div><h4>The judge</h4><small>not AI</small><p>KiCad's rule checker and a circuit simulator. The agents never grade their own work.</p></div></div></div>
+  </div>
+</section>
+
+<section class="band alt" id="how">
+  <div class="wrap">
+    <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--mint)"></span>How it works</div>
+      <h2>One round, repeated until the design passes.</h2></div></div>
+    <ol class="rounds"><li class="lstep sky"><span class="num">1</span><h4>Look</h4><p>The agents get a picture of the design, the rules, and every earlier try.</p></li><li class="lstep lilac"><span class="num">2</span><h4>Propose</h4><p>Each one suggests a fix in its own style. The screener drops the weak ones.</p></li><li class="lstep mint"><span class="num">3</span><h4>Test</h4><p>The real checker tries every fix. No AI grades its own work.</p></li><li class="lstep butter"><span class="num">4</span><h4>Keep the best</h4><p>The best design so far is saved. The next round starts from it.</p></li></ol>
+    <div class="callout"><b>Mistakes get fixed on the spot.</b> When the checker finds a problem, such as two wires touching,
+      the agents start fixing that exact design straight away. You see the fix, not the mistake.</div>
+  </div>
+</section>
+
+
+<section class="band" id="tech">
+  <div class="wrap">
+    <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--sky)"></span>Under the hood</div>
+      <h2>What the agents control, and what they never touch.</h2>
+      <p class="lede">The agents make decisions. Deterministic engineering tools do the drawing, the simulating and the
+        grading. That split is why the results can be trusted.</p></div></div>
+
+    <div class="techjob">
+      <div class="techhead"><h3>Circuit boards: repair what the router leaves</h3>
+        <span class="tag">benchmark: PCBWorld, hard tier</span></div>
+      <ol class="pipe"><li class="plain"><span class="who">Freerouting 2.1</span><b>Route</b><small>A classic autorouter lays most of the copper and leaves a few connections open.</small></li><li class="coral"><span class="who">gemini-decision-1</span><b>Screen</b><small>Which routed nets wall off each open connection? A probability for every candidate.</small></li><li class="sky"><span class="who">gemini-4-hydrogen ×6</span><b>Propose</b><small>Each proposer, in its own style: what to rip up, re-route order, layer, router mode.</small></li><li class="lilac"><span class="who">neon + carbon</span><b>Decide</b><small>Neon flags conflicts on the board picture; Carbon picks, edits or merges the best plans.</small></li><li class="mint"><span class="who">KiCad + PCBWorld</span><b>Judge</b><small>KiCad's push-and-shove router draws; its rule checker and PCBWorld's scorer grade.</small></li></ol>
+      <ul class="facts">
+        <li><b>The agents never draw copper.</b> Their whole action space is rip-up sets, route order, layer, router mode
+          (shove or walk-around) and via bridges. KiCad's own router executes every action.</li>
+        <li><b>A council, not a single model.</b> Proposers cannot see each other. The screener scores each proposal in about a
+          second and is the fallback if a slower model times out. Each chosen plan runs on its own copy of the board, in
+          parallel, and the best board becomes the next round's start.</li>
+        <li><b>Vision where it helps.</b> For a layer change, candidate via sites are drawn as numbered dots on a picture of
+          the board, and the Decisions API ranks them. The router tries them in that order.</li>
+        <li><b>Long horizon when it is stuck.</b> A Gemini Managed Agent stays with one hard board for many turns, calling
+          tools that run the real engine on our machine.</li>
+      </ul>
+    </div>
+
+    <div class="techjob">
+      <div class="techhead"><h3>Chip circuits: size an op-amp that passes everywhere</h3>
+        <span class="tag">two-stage op-amp · SkyWater SKY130 130 nm</span></div>
+      <ol class="pipe"><li class="sky"><span class="who">gemini-4-hydrogen</span><b>Hear</b><small>A spoken or typed spec becomes targets: gain, bandwidth, phase margin, current.</small></li><li class="lilac"><span class="who">gemini-4-carbon</span><b>Plan</b><small>Reads the worst failures and gives each worker its own search direction.</small></li><li class="sky"><span class="who">gemini-4-hydrogen ×4</span><b>Size</b><small>Workers propose transistor widths, lengths, bias current and compensation.</small></li><li class="mint"><span class="who">ngspice · SKY130</span><b>Simulate</b><small>Every candidate runs at 15 corners: 5 process corners × −40, 27, 125 °C.</small></li><li class="butter"><span class="who">gemini-4-neon</span><b>Look</b><small>Reads the Bode plot image of the best design and says what to fix next.</small></li></ol>
+      <ul class="facts">
+        <li><b>A hard pass/fail.</b> Phase margin ≥ 60°, unity-gain bandwidth ≥ 10 MHz, DC gain ≥ 60 dB and core current
+          ≤ 100 µA, at all 15 corners at once, with a guard band on top so the design keeps a safety margin.</li>
+        <li><b>A fair fight.</b> Bayesian optimisation (Optuna TPE and GP) and random search get exactly the same
+          budget, counted in candidates, with 15 simulations each.</li>
+        <li><b>Inputs people actually have.</b> The spec can be spoken (audio straight into the model), and the circuit can
+          be read from a photo of the schematic.</li>
+      </ul>
+    </div>
+
+    <div class="trust">
+      <div><h4>Who checks the judge?</h4><p>A <b>sign-off agent</b> (Gemini Managed Agent) gets the circuit but not our
+        evaluator. It writes its own testbench, calibrates it against the circuit authors' published numbers and
+        re-simulates with the full SkyWater library: it matched our judge at <b>15 of 15</b> corners.</p></div>
+      <div><h4>An agent paid to break us</h4><p>A <b>red-team agent</b> read our evaluator's source and tried to make it
+        report a false pass. It found <b>6 confirmed weaknesses</b> (4 high severity), each backed by real simulation
+        evidence, and wrote test cases for them. A person reviews each one; nothing is applied automatically.</p></div>
+      <div><h4>Long context, kept honest</h4><p>Managed agents keep their whole history and files between turns. The
+        red-team run lasted 20 turns and about 1.5 million tokens. Its budgets (tool calls and wall-clock
+        time) are enforced on our side, not left to the agent.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band alt" id="results">
+  <div class="wrap">
+    <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--mint)"></span>Results</div>
+      <h2>Two hard jobs. The swarm beat the published best at both.</h2></div></div>
+    <div class="jobs">
+      <div class="job">
+        <h3>Connect every wire on a circuit board</h3>
+        <p>A board with one missing connection is scrap. On the 10 hardest boards in the PCBWorld benchmark:</p>
+        <div class="vs"><div><span>routr's agents</span><span class="blocks"><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class=""></i><i class=""></i><i class=""></i></span><b class="ok">7 of 10</b></div>
+          <div><span>Best published result</span><span class="blocks"><i class="base"></i><i class="base"></i><i class="base"></i><i class="base"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></span><b>4 of 10</b></div></div>
+      </div>
+      <div class="job">
+        <h3>Tune a chip amplifier to work in all conditions</h3>
+        <p>It has to pass at 15 combinations of heat, cold, supply voltage and manufacturing variation, all at once.</p>
+        <div class="vs"><div><span>routr's agents</span><span class="blocks"><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i><i class="win"></i></span><b class="ok">7 of 7 runs</b></div>
+          <div><span>Standard optimizers, same budget</span><span class="blocks"><i class="base"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i></span><b>1 of 18 runs</b></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="watch">
+  <div class="wrap">
+    <div class="sechead"><div><div class="eyebrow"><span class="dot" style="background:var(--butter)"></span>Watch</div>
+      <h2>One minute, start to finish.</h2></div></div>
+    <div class="watch"><video class="film" controls muted playsinline preload="none" poster="img/video/summary.jpg" src="img/video/summary.mp4"></video><figure class="shot" data-zoom><img src="img/shots/studio_fix.png" alt="The routr studio after a run: a 3D circuit board marked Ready to manufacture"><figcaption>A real run in the studio. KiCad found 6 short circuits on this board; Gemini fixed them on the spot.</figcaption></figure></div>
+    <div class="cta" style="margin-top:32px"><a class="btn main" href="evidence.html">See every run, chart and baseline</a>
+      <a class="btn paper" href="evidence.html#pcb-studio">Try it live</a></div>
+  </div>
+</section>
+<footer><div class="wrap"><span>routr · Gemini 4 hackathon, New York</span><span>Built 21 Nov 2026, 17:24 from the run files in <code>runs/</code>. Rebuild: <code>.venv/bin/python -m web.build</code></span></div></footer>
+<script src="app.js"></script>
+</body></html>
