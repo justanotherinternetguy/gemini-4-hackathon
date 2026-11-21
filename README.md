@@ -49,6 +49,7 @@ GP-BO and random search on the same budget (`sizing/baseline.py`, `bench/`).
 web/serve.sh        # site on :8080, analog stage on :8000, PCB studio on :8766 (embedded in the site)
 .venv/bin/python -m web.build   # rebuild the site from runs/ after new results
 web/deploy.sh       # publish the built site to the gh-pages branch (routr.internetguy.dev)
+.venv/bin/python -m web.video   # rebuild the 1-minute summary video: runs/site/video/summary.mp4
 ```
 
 | Folder | What |
