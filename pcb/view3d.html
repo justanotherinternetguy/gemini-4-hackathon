@@ -3,117 +3,120 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <style>
-  :root { --ink:#1c2420; --dim:#66736b; --panel:rgba(255,255,255,.84); --line:rgba(28,36,32,.12);
-          --good:#12a05c; --bad:#e23d4f; --accent:#1f6feb; }
+  :root { --ink:#171c19; --ink2:#55605a; --ink3:#8a948e; --line:#dfe3dd; --line2:#c9cfc8; --bg:#ffffff; --canvas:#eef1ea; --fill:#f3f5f1;
+          --good:#0f8a4f; --goodbg:#e3f4ea; --bad:#d23246; --badbg:#fde8ea; --warn:#9a6400; --warnbg:#fdf1d8;
+          --mono:ui-monospace,SFMono-Regular,Menlo,monospace; }
   * { box-sizing:border-box; }
-  html,body { height:100%; margin:0; overflow:hidden; background:#eef1ea; color:var(--ink);
-    font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; }
-  canvas { display:block; }
-  .card { background:var(--panel); backdrop-filter:blur(10px); border:1px solid var(--line); border-radius:14px; padding:12px 15px; }
-  .title { position:fixed; left:22px; top:18px; }
-  .title h1 { margin:0; font-size:22px; font-weight:680; }
-  .title div { color:var(--dim); font-size:13px; margin-top:2px; }
-  .chip { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.06em; padding:2px 8px; border-radius:99px;
-    background:#fff3cd; color:#7a5b00; border:1px solid #f0d98a; margin-left:8px; vertical-align:3px; }
-  .label { color:var(--dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.08em; }
-  button { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px 14px; font:inherit; cursor:pointer; }
-  button:hover { background:#fff; }
+  html,body { height:100%; margin:0; overflow:hidden; background:var(--bg); color:var(--ink);
+    font:13.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
   .hide { display:none !important; }
-  .good { color:var(--good); } .bad { color:var(--bad); }
+  button { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line2); border-radius:7px; padding:6px 12px; cursor:pointer; }
+  button:hover { background:var(--fill); } button:disabled { opacity:.5; cursor:default; }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); font-weight:600; } button.primary:hover { background:#000; }
+  button.small { padding:3px 9px; font-size:12.5px; }
+  .k { color:var(--ink3); font-size:11.5px; letter-spacing:.02em; margin:0 0 6px; }
+  .num { font-variant-numeric:tabular-nums; }
 
-  /* import */
-  .import { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
-  .import .box { pointer-events:auto; width:min(560px,92vw); }
-  .drop { border:2px dashed rgba(28,36,32,.28); border-radius:14px; padding:26px 18px; text-align:center; color:var(--dim); transition:.15s; }
-  .drop b { display:block; color:var(--ink); font-size:19px; margin-bottom:4px; }
-  .drop.over { border-color:var(--accent); background:rgba(31,111,235,.07); }
-  .list { margin-top:12px; max-height:38vh; overflow:auto; display:flex; flex-direction:column; gap:4px; }
-  .list button { text-align:left; display:flex; justify-content:space-between; gap:10px; padding:7px 11px; font-size:13.5px; }
-  .list .tag { color:var(--bad); font-size:12px; white-space:nowrap; }
-  input[type=search] { width:100%; margin-top:12px; padding:8px 11px; border-radius:10px; border:1px solid var(--line); font:inherit; background:#fff; }
+  .app { display:grid; height:100vh; grid-template-rows:46px minmax(0,1fr) auto; grid-template-columns:auto minmax(0,1fr) auto; }
+  .top { grid-column:1 / -1; display:flex; align-items:center; gap:14px; padding:0 16px; border-bottom:1px solid var(--line); }
+  .brand { font-weight:680; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .brand i { width:14px; height:14px; border-radius:3px; background:#2f6b54; box-shadow:inset 0 0 0 3px #2f6b54, inset 0 0 0 5px #d98632; }
+  .file { color:var(--ink2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .test { font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:99px; background:var(--warnbg); color:var(--warn); white-space:nowrap; }
+  .steps { margin-left:auto; display:flex; gap:2px; align-items:center; }
+  .steps span { padding:4px 11px; border-radius:99px; color:var(--ink3); white-space:nowrap; }
+  .steps span b { font-weight:600; margin-right:5px; }
+  .steps .on { background:var(--fill); color:var(--ink); font-weight:600; } .steps .done { color:var(--good); }
+  .steps .on.pass { background:var(--goodbg); color:var(--good); } .steps .on.need { background:var(--warnbg); color:var(--warn); }
 
-  /* left: what the file contains */
-  .info { position:fixed; left:22px; top:84px; width:270px; }
-  .info table { width:100%; border-collapse:collapse; margin-top:6px; }
-  .info td { padding:3px 0; font-variant-numeric:tabular-nums; } .info td:last-child { text-align:right; font-weight:650; }
-  .feed { margin-top:8px; border-top:1px solid var(--line); padding-top:8px; font-size:13px; height:118px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; }
-  .feed div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--dim); } .feed div:last-child { color:var(--ink); font-weight:600; }
-  .feed b { display:inline-block; min-width:44px; }
+  .left { grid-column:1; grid-row:2; width:262px; border-right:1px solid var(--line); padding:14px 14px 0; display:flex; flex-direction:column; min-height:0; }
+  .right { grid-column:3; grid-row:2; width:316px; border-left:1px solid var(--line); padding:14px; overflow:auto; min-height:0; }
+  .rows div { display:flex; justify-content:space-between; padding:2.5px 0; } .rows b { font-weight:600; }
+  .parts { flex:1; overflow:auto; margin:0 -14px; padding:0 8px 10px; }
+  .parts div { display:flex; gap:10px; padding:3px 6px; border-radius:5px; cursor:pointer; color:var(--ink3); }
+  .parts div.in { color:var(--ink); } .parts div.now { background:var(--fill); } .parts div:hover { background:var(--fill); }
+  .parts b { font-weight:600; min-width:46px; } .parts span { color:inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .parts em { font-style:normal; color:var(--ink3); }
 
-  /* right: routing */
-  .hud { position:fixed; top:18px; right:18px; width:330px; display:flex; flex-direction:column; gap:10px; }
-  .big { font-size:54px; font-weight:720; line-height:1.05; font-variant-numeric:tabular-nums; }
-  .big small { font-size:17px; color:var(--dim); font-weight:500; margin-left:6px; }
-  .row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-  .mid { font-size:24px; font-weight:660; font-variant-numeric:tabular-nums; }
-  .bar { height:7px; background:rgba(28,36,32,.1); border-radius:99px; overflow:hidden; margin-top:8px; }
-  .bar > i { display:block; height:100%; width:0; background:var(--good); transition:width .35s ease; }
-  .status { font-weight:700; font-size:16px; text-align:center; padding:10px 12px; border-radius:12px; background:var(--panel); border:1px solid var(--line); color:var(--dim); }
-  .agents { display:flex; flex-direction:column; gap:6px; max-height:30vh; overflow:auto; }
-  .agent { display:flex; align-items:center; gap:9px; font-size:13.5px; }
-  .agent i { width:11px; height:11px; border-radius:50%; flex:none; } .agent b { font-weight:640; min-width:64px; }
-  .agent span { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .agent.busy span { color:var(--ink); }
+  .stage { grid-column:2; grid-row:2; position:relative; background:var(--canvas); min-width:0; min-height:0; overflow:hidden; }
+  .stage canvas { display:block; position:absolute; inset:0; }
+  .legend { position:absolute; left:14px; bottom:10px; display:flex; gap:14px; color:var(--ink2); font-size:12px; pointer-events:none; }
+  .legend i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:6px; }
+  .view { position:absolute; right:12px; bottom:10px; display:flex; gap:6px; }
+  .tip { position:absolute; pointer-events:none; transform:translate(-50%,-150%); font-size:12px; font-weight:600; color:#fff; padding:2px 8px; border-radius:99px; white-space:nowrap; }
 
-  /* bottom */
-  .go { position:fixed; left:50%; bottom:92px; transform:translateX(-50%); text-align:center; }
-  .go button { font-size:20px; font-weight:700; padding:14px 46px; border-radius:14px; background:var(--ink); color:#fff; border:none;
-    box-shadow:0 8px 24px rgba(0,0,0,.18); animation:pulse 1.6s ease-in-out infinite; }
-  .go button:hover { background:#000; } .go div { color:var(--dim); font-size:13px; margin-top:8px; }
-  @keyframes pulse { 50% { box-shadow:0 8px 34px rgba(18,160,92,.55); } }
-  .verdict { position:fixed; left:50%; bottom:74px; transform:translateX(-50%); width:min(640px,92vw); }
-  .verdict h2 { margin:0 0 4px; font-size:24px; } .verdict p { margin:0; color:var(--dim); }
-  .verdict.pass { border-color:var(--good); } .verdict.pass h2 { color:var(--good); }
-  .verdict.fail { border-color:var(--bad); } .verdict.fail h2 { color:var(--bad); }
-  .verdict ul { margin:10px 0 0; padding:0; list-style:none; max-height:22vh; overflow:auto; font-size:13.5px; }
-  .verdict li { padding:5px 0; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:12px; }
-  .verdict li span { color:var(--dim); white-space:nowrap; } .verdict .acts { margin-top:10px; display:flex; gap:8px; }
-  .ctl { position:fixed; left:22px; bottom:18px; display:flex; gap:8px; align-items:center; }
-  .legend { color:var(--dim); font-size:12.5px; margin-left:10px; display:flex; gap:14px; }
-  .legend i { display:inline-block; width:14px; height:4px; border-radius:2px; vertical-align:middle; margin-right:5px; }
-  @media (max-width:1000px) { .hud { width:260px; } .big { font-size:40px; } .legend { display:none; }
-    body[data-phase=routing] .info, body[data-phase=done] .info { display:none; } }
-  .tip { position:fixed; pointer-events:none; transform:translate(-50%,-150%); font-size:12px; font-weight:650; color:#fff;
-    padding:3px 9px; border-radius:99px; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.18); }
+  .imp { position:absolute; inset:0; overflow:auto; display:flex; justify-content:center; padding:5vh 24px 24px; }
+  .imp .in { width:min(880px,100%); }
+  .drop { border:1.5px dashed var(--line2); border-radius:12px; background:var(--bg); padding:26px; text-align:center; transition:.12s; }
+  .drop.over { border-color:var(--ink); background:var(--fill); }
+  .drop h2 { margin:0 0 3px; font-size:18px; font-weight:650; } .drop p { margin:0 0 12px; color:var(--ink2); }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(196px,1fr)); gap:12px; }
+  .cardb { text-align:left; padding:0; border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+  .cardb img { width:100%; height:112px; object-fit:contain; background:#0e1512; padding:8px; }
+  .cardb div { padding:8px 10px 10px; } .cardb strong { display:block; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cardb small { color:var(--ink2); font-size:12px; }
+  .badge { display:inline-block; margin-top:5px; font-size:11.5px; font-weight:600; padding:1px 7px; border-radius:99px; background:var(--badbg); color:var(--bad); }
+  input[type=search] { width:100%; padding:8px 11px; border-radius:8px; border:1px solid var(--line2); font:inherit; background:var(--bg); margin:18px 0 8px; }
+  .results { display:flex; flex-direction:column; gap:3px; } .results button { text-align:left; display:flex; justify-content:space-between; border-color:var(--line); }
+
+  .bigrow { display:flex; align-items:baseline; gap:8px; } .big { font-size:40px; font-weight:700; line-height:1.05; }
+  .bar { height:6px; border-radius:99px; background:var(--fill); overflow:hidden; } .bar i { display:block; height:100%; width:0; background:var(--good); transition:width .3s ease; }
+  .agents { margin:14px 0 0; } .agent { display:flex; align-items:center; gap:8px; padding:3px 0; }
+  .agent i { width:9px; height:9px; border-radius:50%; flex:none; } .agent b { font-weight:600; min-width:48px; }
+  .agent span { color:var(--ink3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .agent.busy span { color:var(--ink); }
+  .log { font:11.5px/1.7 var(--mono); color:var(--ink2); max-height:150px; overflow:hidden; display:flex; flex-direction:column-reverse; }
+  .res h2 { margin:0 0 4px; font-size:19px; font-weight:680; } .res.pass h2 { color:var(--good); } .res.need h2 { color:var(--warn); }
+  .res p { margin:0 0 10px; color:var(--ink2); }
+  .todo { border-top:1px solid var(--line); padding:7px 0; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .todo small { display:block; color:var(--ink3); }
+  .acts { display:flex; flex-direction:column; gap:6px; margin-top:12px; } .acts .two { display:flex; gap:6px; } .acts .two button { flex:1; }
+
+  .foot { grid-column:1 / -1; grid-row:3; display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid var(--line); color:var(--ink2); min-height:50px; }
+  .foot .grow { flex:1; } .foot b { color:var(--ink); font-weight:600; } .foot .primary { padding:8px 22px; font-size:14.5px; }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
 </head>
-<body>
-<div class="title"><h1>__TITLE__<span class="chip hide" id="dummy">TEST DATA · made-up agents</span></h1><div id="sub">Import a board to begin</div></div>
-
-<div class="import" id="import"><div class="box card">
-  <div class="drop" id="drop"><b>Drop a KiCad board file here</b><span>.kicad_pcb · the file holds the outline, every part, every pad and which pads must be connected</span></div>
-  <input type="search" id="search" placeholder="or pick a benchmark board…" class="hide">
-  <div class="list" id="list"></div>
-</div></div>
-
-<div class="info card hide" id="info">
-  <div class="label">What the file contains</div>
-  <table>
-    <tr><td>Board</td><td id="i-size">–</td></tr><tr><td>Copper layers</td><td id="i-layers">–</td></tr>
-    <tr><td>Parts placed</td><td id="i-parts">0</td></tr><tr><td>Pads</td><td id="i-pads">0</td></tr>
-    <tr><td>Signals</td><td id="i-nets">–</td></tr><tr><td>Connections to route</td><td id="i-conns">–</td></tr>
-  </table>
-  <div class="feed" id="feed"></div>
-</div>
-
-<div class="hud hide" id="hud">
-  <div class="status" id="status">routing</div>
-  <div class="card"><div class="label">Connections still open</div>
-    <div class="big" id="open">–<small id="total"></small></div><div class="bar"><i id="bar"></i></div></div>
-  <div class="row">
-    <div class="card"><div class="label">Violations</div><div class="mid" id="viol">–</div></div>
-    <div class="card"><div class="label">Copper</div><div class="mid" id="len">–</div></div>
-    <div class="card"><div class="label">Versions</div><div class="mid" id="count">0</div></div>
+<body><div class="app">
+  <div class="top">
+    <div class="brand"><i></i>__TITLE__</div><div class="file" id="file">No board open</div><span class="test hide" id="dummy">Test data · made-up agents</span>
+    <div class="steps"><span id="s1"><b>1</b>Import</span><span id="s2"><b>2</b>Inspect</span><span id="s3"><b>3</b>Route</span><span id="s4"><b>4</b>Verify</span></div>
   </div>
-  <div class="card"><div class="label" style="margin-bottom:8px">Agents</div><div class="agents" id="agents"></div></div>
-</div>
 
-<div class="go hide" id="go"><button id="route">Route</button><div id="gohint"></div></div>
-<div class="verdict card hide" id="verdict"></div>
-<div class="ctl"><button id="new">New board</button><button id="spin">Pause spin</button><button id="ghost">Solid parts</button>
-  <div class="legend hide" id="legend"><span><i style="background:#d98632"></i>front copper</span>
-  <span><i style="background:#4f86d9"></i>back copper</span><span><i style="background:#e23d4f"></i>still to connect</span></div></div>
-<div id="tips"></div><div class="tip hide" id="place" style="background:#1c2420"></div>
+  <div class="left hide" id="left">
+    <p class="k">Board</p>
+    <div class="rows num"><div><span>Size</span><b id="i-size">–</b></div><div><span>Copper layers</span><b id="i-layers">–</b></div>
+      <div><span>Parts</span><b id="i-parts">–</b></div><div><span>Pads</span><b id="i-pads">–</b></div>
+      <div><span>Signals</span><b id="i-nets">–</b></div><div><span>To connect</span><b id="i-conns" style="color:var(--bad)">–</b></div></div>
+    <p class="k" style="margin-top:14px">Parts</p><div class="parts" id="parts"></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="imp" id="imp"><div class="in">
+      <div class="drop" id="drop"><h2>Drop a board file to open it</h2><p id="drophint">KiCad .kicad_pcb · the outline, parts, pads and required connections are read from the file</p>
+        <button class="primary" id="choose">Choose file</button><input type="file" id="pick" accept=".kicad_pcb" class="hide"></div>
+      <div id="samples" class="hide"><p class="k" style="margin:22px 0 8px">Or start from a real open-source board</p><div class="cards" id="cards"></div>
+        <input type="search" id="search" placeholder="Search all benchmark boards…"><div class="results" id="results"></div></div>
+    </div></div>
+    <div class="legend hide" id="legend"><span><i style="background:#d98632"></i>front copper</span><span><i style="background:#4f86d9"></i>back copper</span><span><i style="background:#e23d4f"></i>still to connect</span></div>
+    <div class="view hide" id="view"><button class="small" id="ghost">Solid parts</button><button class="small" id="spin">Pause spin</button></div>
+    <div id="tips"></div><div class="tip hide" id="place" style="background:#171c19"></div>
+  </div>
+
+  <div class="right hide" id="right">
+    <div id="swarm">
+      <p class="k">Swarm · <span id="clock" class="num">0:00</span></p>
+      <div class="bigrow"><span class="big num" id="open">–</span><span id="total" style="color:var(--ink2)"></span></div>
+      <div class="bar" style="margin:8px 0 0"><i id="bar"></i></div>
+      <div class="agents" id="agents"></div>
+      <p class="k" style="margin-top:16px">Activity</p><div class="log" id="log"></div>
+    </div>
+    <div id="result" class="res hide"></div>
+  </div>
+
+  <div class="foot hide" id="foot"><span id="footmsg" class="grow"></span>
+    <span id="footstats" class="hide num">Rule violations <b id="viol">0</b> &nbsp;·&nbsp; Copper <b id="len">0 mm</b> &nbsp;·&nbsp; Versions <b id="count">0</b></span>
+    <button id="stop" class="hide">Stop</button><button id="newb">Open another board</button><button class="primary hide" id="route">Route board</button></div>
+</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -123,22 +126,29 @@ const T = 1.6, COPPER = { front: 0xd98632, back: 0x4f86d9, inner: 0x8a8f98 };
 const PALETTE = ['#e6396b', '#12a05c', '#e0a100', '#2f8fe6', '#8a5cf0', '#f06a2a', '#11a8a8', '#c03fc0'];
 const $ = id => document.getElementById(id), show = (id, on) => $(id).classList.toggle('hide', !on);
 const post = (url, body, headers) => fetch(url, { method: 'POST', body, headers }).then(r => r.json());
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const nice = n => (n || '').replace(/^\d+_/, '').replace(/_/g, ' ');
+const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 
-// ---------- three.js ----------
+// ---------- three.js, sized to the stage ----------
+const stage = $('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-document.body.prepend(renderer.domElement);
+stage.prepend(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef1ea);
-const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 1, 5000);
+const camera = new THREE.PerspectiveCamera(32, 1, 1, 5000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.55; controls.maxPolarAngle = Math.PI * 0.49;
 scene.add(new THREE.HemisphereLight(0xffffff, 0xcfd6cc, 1.15));
 const sun = new THREE.DirectionalLight(0xffffff, 2.1); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; scene.add(sun); scene.add(sun.target);
 let world = new THREE.Group(); scene.add(world);
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+let SW = 1, SH = 1;
+function fit() { SW = stage.clientWidth || 1; SH = stage.clientHeight || 1; renderer.setSize(SW, SH); camera.aspect = SW / SH; camera.updateProjectionMatrix(); }
+new ResizeObserver(fit).observe(stage); fit();
+const toScreen = v => { v.project(camera); return [(v.x + 1) / 2 * SW, (1 - v.y) / 2 * SH]; };
 
 let C = { x: 0, y: 0 }, SPAN = 60;
 const P = (x, y) => [x - C.x, y - C.y];
@@ -152,23 +162,25 @@ const M = {
 const ringGeo = new THREE.CylinderGeometry(1, 1, 1, 20), boxGeo = new THREE.BoxGeometry(1, 1, 1);
 
 // ---------- state ----------
-let phase = 'import', epoch = -1, sceneData = null, nets = {}, frames = [], heavy = [], applied = -1, total = null;
-let boardMesh = null, bigParts = [], ghost = true, asm = [], asmT = 0, asmEnd = 0, lastState = {};
+let phase = 'import', epoch = -1, nets = {}, frames = [], heavy = [], applied = -1, total = null, lastState = {};
+let boardMesh = null, bigParts = [], ghost = true, asm = [], asmT = 0, asmEnd = 0, fly = null, routeT0 = 0, outcome = '';
 let copperGroup, webGroup, violGroup; const copper = new Map(), agents = new Map(), settle = [], ripping = [];
 const webMat = new THREE.MeshBasicMaterial({ color: 0xe23d4f, transparent: true, opacity: 0, depthWrite: false }); let webShown = 0;
 
 function resetWorld() {
   scene.remove(world); world = new THREE.Group(); scene.add(world);
   copperGroup = new THREE.Group(); webGroup = new THREE.Group(); violGroup = new THREE.Group(); world.add(copperGroup, webGroup, violGroup);
-  copper.clear(); settle.length = ripping.length = 0; bigParts = []; asm = []; boardMesh = null;
-  for (const a of agents.values()) a.tip.remove(); agents.clear(); $('agents').innerHTML = ''; $('feed').innerHTML = '';
-  frames = []; heavy = []; applied = -1; total = null; webShown = 0; webMat.opacity = 0; $('status').style.cssText = '';
+  copper.clear(); settle.length = ripping.length = 0; bigParts = []; asm = []; boardMesh = null; fly = null;
+  for (const a of agents.values()) a.tip.remove(); agents.clear(); $('agents').innerHTML = ''; $('parts').innerHTML = ''; $('log').innerHTML = '';
+  frames = []; heavy = []; applied = -1; total = null; webShown = 0; webMat.opacity = 0; outcome = '';
 }
-function setGhost(on) { ghost = on; for (const m of bigParts) m.userData.to = on ? .2 : 1; }
+function setGhost(on) { ghost = on; for (const m of bigParts) m.userData.to = on ? .2 : 1; $('ghost').textContent = on ? 'Solid parts' : 'Glass parts'; }
+function flyTo(x, y, z, dist) { controls.autoRotate = false; $('spin').textContent = 'Spin';
+  const dir = camera.position.clone().sub(controls.target).normalize(); fly = { target: new THREE.Vector3(x, y, z), pos: new THREE.Vector3(x, y, z).add(dir.multiplyScalar(dist)), t: 0 }; }
 
 // ---------- build the board piece by piece ----------
 function buildScene(s) {
-  resetWorld(); sceneData = s; nets = s.nets || {};
+  resetWorld(); nets = s.nets || {};
   const [x0, y0, x1, y1] = s.bbox; C = { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   const W = x1 - x0, H = y1 - y0; SPAN = Math.max(W, H);
   boardMesh = new THREE.Mesh(new THREE.BoxGeometry(W, T, H), mat(0x2f6b54, { roughness: .78, transparent: true, opacity: 1 }));
@@ -200,16 +212,16 @@ function buildScene(s) {
     }
     if (groups[p.ci]) groups[p.ci].pads++;
   }
-  // biggest parts first, then the small ones: reads as "the chip, the connectors, then the passives"
-  asm = groups.sort((a, b) => b.area - a.area);
+  asm = groups.sort((a, b) => b.area - a.area);        // the chip and connectors first, then the small parts
   const gap = Math.min(.26, Math.max(.045, 3.8 / Math.max(1, asm.length)));
-  asm.forEach((a, i) => { a.at = .75 + i * gap; a.state = 0; });
+  asm.forEach((a, i) => { a.at = .75 + i * gap; a.state = 0;
+    const row = document.createElement('div'); row.innerHTML = `<b>${esc(a.c.ref || '?')}</b><span>${esc(a.c.value || a.c.kind)}</span><em>${a.pads}</em>`;
+    row.title = 'Show on the board'; row.onclick = () => flyTo(a.anchor.x, 0, a.anchor.z, SPAN * .75); a.row = row; $('parts').append(row); });
   asmT = 0; asmEnd = .75 + asm.length * gap + .55;
 
   const d = SPAN * 1.55; camera.position.set(d * .62, d * .72, d * .86); controls.target.set(0, 0, 0); controls.update();
   sun.position.set(-SPAN * .7, SPAN * 1.5, SPAN * .5);
   const sc = sun.shadow.camera; sc.left = sc.bottom = -SPAN; sc.right = sc.top = SPAN; sc.near = 1; sc.far = SPAN * 5; sc.updateProjectionMatrix();
-
   const m = s.summary || {};
   $('i-size').textContent = `${m.width_mm} × ${m.height_mm} mm`; $('i-layers').textContent = m.copper_layers ?? '–';
   $('i-parts').textContent = `0 of ${m.components}`; $('i-pads').textContent = '0'; $('i-nets').textContent = m.nets ?? '–'; $('i-conns').textContent = '…';
@@ -220,22 +232,19 @@ function stepAssembly(dt) {
   const b = Math.min(1, asmT / .6); boardMesh.scale.setScalar(Math.max(.001, backOut(b))); boardMesh.position.y = -T / 2 + (1 - b) * SPAN * .25;
   let placed = 0, pads = 0, current = null;
   for (const a of asm) {
-    const t = (asmT - a.at) / .42;
-    if (t <= 0) continue;
-    if (a.state === 0) { a.state = 1; a.g.visible = true; const row = document.createElement('div');
-      row.innerHTML = '<b></b> '; row.firstChild.textContent = a.c.ref || '?'; row.append(a.c.value || a.c.kind); $('feed').append(row);
-      while ($('feed').children.length > 7) $('feed').firstChild.remove(); }
+    const t = (asmT - a.at) / .42; if (t <= 0) continue;
+    if (a.state === 0) { a.state = 1; a.g.visible = true; a.row.classList.add('in', 'now'); a.row.scrollIntoView({ block: 'nearest' }); }
     const k = Math.min(1, t), e = backOut(k);
     a.g.position.y = (1 - k) * (1 - k) * SPAN * .22; a.g.scale.setScalar(Math.max(.001, .55 + .45 * e));
-    if (k < 1) current = a; else { placed++; pads += a.pads; }
+    if (k < 1) current = a; else { placed++; pads += a.pads; if (a.state === 1) { a.state = 2; a.row.classList.remove('now'); } }
   }
   $('i-parts').textContent = `${placed} of ${asm.length}`; $('i-pads').textContent = pads;
   const tip = $('place');
-  if (current) { const v = current.anchor.clone().project(camera); tip.classList.remove('hide');
-    tip.textContent = (current.c.ref || '') + (current.c.value ? ' · ' + current.c.value : '');
-    tip.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; tip.style.top = ((1 - v.y) / 2 * innerHeight) + 'px'; }
+  if (current) { const [x, y] = toScreen(current.anchor.clone()); tip.classList.remove('hide');
+    tip.textContent = (current.c.ref || '') + (current.c.value ? ' · ' + current.c.value : ''); tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
   else tip.classList.add('hide');
-  if (asmT >= asmEnd) { for (const a of asm) { a.g.position.y = 0; a.g.scale.setScalar(1); } tip.classList.add('hide'); setPhase('ready'); }
+  if (asmT >= asmEnd) { for (const a of asm) { a.g.position.y = 0; a.g.scale.setScalar(1); a.row.classList.remove('now'); }
+    $('i-parts').textContent = asm.length; tip.classList.add('hide'); $('parts').scrollTop = 0; setPhase('ready'); }
 }
 
 // ---------- copper ----------
@@ -283,6 +292,15 @@ function agent(name) {
   const a = { name: key, color: c3, queue: [], job: null, marker, orb, beam, tip, el, done: 0 }; agents.set(key, a); return a;
 }
 const say = (a, text, busy) => { a.el.lastChild.textContent = text; a.el.classList.toggle('busy', !!busy); };
+let solverEvents = 0;
+const VERB = { done: 'connected', connected: 'connected', start: 'started', started: 'started', fail: 'gave up on', failed: 'gave up on', retry: 'retrying', rip: 'removed', removed: 'removed' };
+function showEvents(evs) {
+  if (!evs || evs.length === solverEvents) return; solverEvents = evs.length;
+  $('log').innerHTML = '';
+  for (const e of evs.slice(-9)) { const row = document.createElement('div');
+    row.textContent = [mmss(e.t || 0) + ' ', e.agent || '', VERB[e.type] || e.type || '', e.net || '', e.note || e.reason || ''].filter(Boolean).join(' '); $('log').prepend(row); }
+}
+function log(t, text) { if (solverEvents) return; const row = document.createElement('div'); row.textContent = mmss(t) + '  ' + text; $('log').prepend(row); while ($('log').children.length > 9) $('log').lastChild.remove(); }
 function chain(segs) {
   const left = segs.slice(), out = []; let tip = null; const d2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2;
   while (left.length) { let bi = 0, flip = false, best = Infinity;
@@ -294,8 +312,9 @@ function chain(segs) {
 // ---------- applying board versions ----------
 async function getHeavy(i) { if (!heavy[i] || heavy[i].open_pairs == null) heavy[i] = await (await fetch('/frame/' + i)).json(); return heavy[i]; }
 function applyVersion(i, h) {
-  const a = agent(frames[i].agent), want = new Set([...h.segments.map(s => s.k), ...h.vias.map(v => v.k)]);
-  for (const [k, o] of copper) if (!want.has(k)) { copper.delete(k); ripping.push({ o, t: 0 }); }
+  const a = agent(frames[i].agent), want = new Set([...h.segments.map(s => s.k), ...h.vias.map(v => v.k)]); let gone = 0;
+  for (const [k, o] of copper) if (!want.has(k)) { copper.delete(k); ripping.push({ o, t: 0 }); gone++; }
+  if (gone) log(frames[i].t, `${a.name} removed ${gone} track${gone === 1 ? '' : 's'}`);
   const fresh = h.segments.filter(s => !copper.has(s.k)), freshVias = h.vias.filter(v => !copper.has(v.k)), byNet = new Map();
   for (const s of fresh) { if (!byNet.has(s.net)) byNet.set(s.net, []); byNet.get(s.net).push(s); }
   for (const [net, segs] of byNet) {
@@ -310,14 +329,14 @@ function applyVersion(i, h) {
 let statsFor = -1, statsDrawn = -1;
 function showStats(i) {
   const f = frames[i]; if (!f) return; statsFor = i;
-  $('len').textContent = Math.round(f.length_mm) + ' mm'; $('count').textContent = Math.max(0, frames.length - 1);
+  $('len').textContent = Math.round(f.length_mm).toLocaleString() + ' mm'; $('count').textContent = Math.max(0, frames.length - 1);
   if (!f.checked) return;
   statsDrawn = i;
   if (total == null && frames[0]?.checked) total = frames[0].open;
-  $('open').firstChild.nodeValue = f.open; $('open').className = 'big ' + (f.open === 0 ? 'good' : '');
-  $('total').textContent = total != null ? 'of ' + total : ''; $('bar').style.width = (total ? Math.max(0, 100 * (1 - f.open / total)) : 0) + '%';
-  $('viol').textContent = f.violations; $('viol').className = 'mid ' + (f.violations === 0 ? 'good' : 'bad');
-  if (phase !== 'done') $('status').textContent = f.open === 0 ? 'all connected · final check' : 'routing · ' + f.open + ' connections to go';
+  $('open').textContent = f.open; $('open').style.color = f.open === 0 ? 'var(--good)' : '';
+  $('total').textContent = total != null ? `of ${total} left to connect` : 'left to connect';
+  $('bar').style.width = (total ? Math.max(0, 100 * (1 - f.open / total)) : 0) + '%';
+  $('viol').textContent = f.violations; $('viol').style.color = f.violations ? 'var(--bad)' : 'var(--good)';
   heavy[i] = heavy[i]?.open_pairs ? heavy[i] : null;
   getHeavy(i).then(h => { if (statsFor === i) { setWeb(h.open_pairs); setViolations(h.viol_pts); } });
 }
@@ -325,71 +344,93 @@ const idle = () => [...agents.values()].every(a => !a.job && !a.queue.length);
 
 // ---------- phases ----------
 function setPhase(p) {
-  phase = p; document.body.dataset.phase = p;
-  show('import', p === 'import'); show('info', p !== 'import'); show('hud', p === 'routing' || p === 'done');
-  show('go', p === 'ready'); show('legend', p !== 'import' && p !== 'assembling'); if (p !== 'done') show('verdict', false);
-  const name = (lastState.board || '').replace(/^\d+_/, '').replace(/_/g, ' ');
-  if (p === 'import') $('sub').textContent = 'Import a board to begin';
-  if (p === 'assembling') $('sub').textContent = name + ' · building the board from the file';
-  if (p === 'ready') { setGhost(true); $('sub').textContent = name + ' · parts placed, no copper yet';
-    $('gohint').textContent = lastState.can_route ? 'A swarm of agents will lay the copper' : 'No producer can route this board'; $('route').disabled = !lastState.can_route; }
-  if (p === 'routing') $('sub').textContent = name + ' · agents routing';
-  if (p === 'done') $('sub').textContent = name + ' · checked by the design-rule checker';
+  phase = p;
+  show('imp', p === 'import'); show('left', p === 'assembling' || p === 'ready'); show('right', p === 'routing' || p === 'done');
+  show('foot', p !== 'import'); show('legend', p !== 'import' && p !== 'assembling'); show('view', p !== 'import');
+  show('route', p === 'ready'); show('stop', p === 'routing'); show('footstats', p === 'routing' || p === 'done');
+  show('swarm', p !== 'done'); show('result', p === 'done'); show('newb', p !== 'routing');
+  renderer.domElement.style.visibility = p === 'import' ? 'hidden' : 'visible';
+  const order = ['import', 'assembling', 'routing', 'done'], at = { import: 0, assembling: 1, ready: 1, routing: 2, done: 3 }[p];
+  ['s1', 's2', 's3', 's4'].forEach((id, i) => { $(id).className = i < at ? 'done' : i === at ? 'on' : ''; });
+  if (p === 'done') $('s4').className = 'on ' + (outcome === 'pass' ? 'pass' : 'need');
+  $('file').textContent = lastState.board ? nice(lastState.board) : 'No board open';
+  if (p === 'assembling') $('footmsg').textContent = 'Reading the board file and placing its parts…';
+  if (p === 'ready') { setGhost(true); $('route').disabled = !lastState.can_route;
+    $('footmsg').innerHTML = (total != null ? `<b>${total} connections</b> to route` : 'Counting the connections to route…') +
+      (lastState.has_project ? ' · design rules loaded from the project file' : ' · no project file, so KiCad’s default rules apply') +
+      (lastState.can_route ? '' : ' · nothing is set up to route this board'); }
+  if (p === 'routing') $('footmsg').textContent = 'Agents are laying copper. Every version is checked by KiCad’s design-rule checker.';
+  if (p === 'done') $('footmsg').textContent = 'Checked by KiCad’s design-rule checker.';
+  fit();
 }
 function verdict() {
-  const f = frames[frames.length - 1], h = heavy[frames.length - 1] || {}, v = $('verdict'), n = agents.size;
-  const secs = lastState.route_seconds != null ? ` · ${lastState.route_seconds} s` : '';
-  const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  const desc = d => { const m = /pad (\S+) \[(.*?)\] of (\S+)/.exec(d || ''); return m ? { part: `${m[3]} pad ${m[1]}`, net: m[2] } : { part: d || '?', net: '' }; };
-  if (f.open === 0 && f.violations === 0) {
-    v.className = 'verdict card pass';
-    v.innerHTML = `<h2>Clean pass</h2><p>Every connection made · zero rule violations · ${Math.round(f.length_mm)} mm of copper · ${n} agent${n === 1 ? '' : 's'}${secs}</p>
-      <div class="acts"><button id="again">Route again</button></div>`;
-    $('status').textContent = 'CLEAN PASS'; $('status').style.cssText = 'background:var(--good);color:#fff;border-color:var(--good)';
+  const f = frames[frames.length - 1], h = heavy[frames.length - 1] || {}, v = $('result'), n = agents.size;
+  const secs = lastState.route_seconds != null ? Math.round(lastState.route_seconds) + ' s' : '–';
+  const desc = d => { const m = /pad (\S+) \[(.*?)\] of (\S+)/.exec(d || ''); return m ? { part: `${m[3]}.${m[1]}`, net: m[2] } : { part: d || '?', net: '' }; };
+  const facts = `<div class="rows num"><div><span>Connections</span><b>${total != null ? total - f.open : '–'} of ${total ?? '–'}</b></div>
+    <div><span>Rule violations</span><b>${f.violations}</b></div><div><span>Copper</span><b>${Math.round(f.length_mm).toLocaleString()} mm</b></div>
+    <div><span>Layer changes</span><b>${f.vias}</b></div><div><span>Agents · time</span><b>${n} · ${secs}</b></div>${lastState.result?.attempts != null ? `<div><span>Attempts</span><b>${esc(lastState.result.attempts)}</b></div>` : ''}</div>` +
+    (lastState.solver_exit ? `<p style="color:var(--bad);margin-top:8px">The solver stopped with an error (exit ${esc(lastState.solver_exit)}).</p>` : '');
+  outcome = f.open === 0 && f.violations === 0 ? 'pass' : 'need';
+  if (outcome === 'pass') {
+    v.className = 'res pass';
+    v.innerHTML = `<h2>Ready to manufacture</h2><p>Every connection is made and no rule is broken.</p>${facts}
+      <div class="acts"><button class="primary" id="dl">Download routed board</button><div class="two"><button id="replay">Replay</button><button id="again">Route again</button></div></div>`;
   } else {
-    v.className = 'verdict card fail';
-    const rows = (h.open_pairs || []).map(p => { const a = desc(p[4]), b = desc(p[5]); return `<li><b>${esc(a.part)} ↔ ${esc(b.part)}</b><span>${esc(a.net || b.net)} · not connected</span></li>`; })
-      .concat((h.viol_pts || []).map(p => `<li><b>${esc(p[2])}</b><span>${esc(desc(p[3]).part)} · rule violation</span></li>`));
-    v.innerHTML = `<h2>Needs you: ${f.open} connection${f.open === 1 ? '' : 's'} left${f.violations ? ', ' + f.violations + ' rule violation' + (f.violations === 1 ? '' : 's') : ''}</h2>
-      <p>The agents stopped here. Everything else is routed and checked. What is left is marked in red on the board:</p><ul>${rows.join('')}</ul>
-      <div class="acts"><button id="again">Try again</button></div>`;
-    $('status').textContent = 'NEEDS YOU'; $('status').style.cssText = 'color:var(--bad);border-color:var(--bad)';
+    v.className = 'res need';
+    const pairs = h.open_pairs || [], viols = h.viol_pts || [];
+    const rows = pairs.map((p, i) => { const a = desc(p[4]), b = desc(p[5]);
+      return `<div class="todo"><span><b>${esc(a.part)} to ${esc(b.part)}</b><small>${esc(a.net || b.net || 'signal')} · not connected</small></span><button class="small" data-pair="${i}">Show</button></div>`; })
+      .concat(viols.map((p, i) => `<div class="todo"><span><b>${esc(p[2])}</b><small>${esc(desc(p[3]).part)} · rule violation</small></span><button class="small" data-viol="${i}">Show</button></div>`));
+    const head = [f.open ? `${f.open} connection${f.open === 1 ? '' : 's'}` : '', f.violations ? `${f.violations} rule violation${f.violations === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    v.innerHTML = `<h2>${head} need${(f.open + f.violations) === 1 ? 's' : ''} you</h2>
+      <p>${total != null ? total - f.open : '–'} of ${total ?? '–'} connections are routed and checked. What is left is marked in red on the board.</p>${rows.join('')}
+      <div class="acts"><button class="primary" id="again">Try again</button><button id="dl">Download and finish in KiCad</button><button id="replay">Replay</button></div>`;
+    v.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => { const p = pairs[+b.dataset.pair], [ax, az] = P(p[0], p[1]), [bx, bz] = P(p[2], p[3]);
+      flyTo((ax + bx) / 2, 0, (az + bz) / 2, Math.max(SPAN * .45, Math.hypot(bx - ax, bz - az) * 2.2)); });
+    v.querySelectorAll('[data-viol]').forEach(b => b.onclick = () => { const p = viols[+b.dataset.viol], [x, z] = P(p[0], p[1]); flyTo(x, 0, z, SPAN * .45); });
   }
-  show('verdict', true); $('again').onclick = e => startRoute(e.shiftKey ? 3 : 0);
+  $('dl').onclick = () => { location.href = '/download'; };
+  $('again').onclick = e => startRoute(e.shiftKey ? 3 : 0);
+  $('replay').onclick = replay;
+}
+function clearCopper() {
+  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0; $('log').innerHTML = ''; solverEvents = 0;
+  for (const a of agents.values()) { a.queue = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
+}
+async function replay() {
+  clearCopper(); showStats(0); statsFor = 0;
+  for (let i = 1; i < frames.length; i++) applyVersion(i, await getHeavy(i));
 }
 async function startRoute(leave) {
   const r = await post('/route', JSON.stringify({ leave }), { 'Content-Type': 'application/json' });
-  if (!r.ok) { $('gohint').textContent = r.error; return; }
-  $('status').style.cssText = ''; show('verdict', false);
-  for (const [, o] of copper) copperGroup.remove(o.g); copper.clear(); violGroup.clear(); settle.length = ripping.length = 0;
-  for (const a of agents.values()) { a.queue = []; a.job = null; a.done = 0; a.marker.visible = false; a.tip.style.display = 'none'; say(a, 'idle'); }
-  frames = frames.slice(0, 1); heavy = heavy.slice(0, 1); applied = 0; routeSeen = false; setPhase('routing'); showStats(0);
+  if (!r.ok) { $('footmsg').textContent = r.error; return; }
+  clearCopper(); frames = frames.slice(0, 1); heavy = heavy.slice(0, 1); applied = 0; routeT0 = performance.now(); outcome = '';
+  setPhase('routing'); showStats(0);
 }
 $('route').onclick = e => startRoute(e.shiftKey ? 3 : 0);
+$('stop').onclick = () => post('/stop', '{}', { 'Content-Type': 'application/json' });
 
 // ---------- polling ----------
-let busy = false, routeSeen = false;
+let busy = false;
 async function poll() {
   if (busy) return; busy = true;
   try {
     const s = lastState = await (await fetch('/state')).json();
     show('dummy', !!(s.dummy && s.board));
-    if (s.epoch !== epoch) {
-      epoch = s.epoch;
-      if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import');
-    }
+    if (s.epoch !== epoch) { epoch = s.epoch; if (s.board) { buildScene(await (await fetch('/scene')).json()); setPhase('assembling'); } else setPhase('import'); }
     if (s.board && phase !== 'assembling' && phase !== 'import') {
       frames = s.frames;
-      if (frames[0]?.checked && total == null) { total = frames[0].open; $('i-conns').textContent = total; }
+      if (frames[0]?.checked && total == null) { total = frames[0].open; $('i-conns').textContent = total; if (phase === 'ready') setPhase('ready'); }
       if (phase === 'ready' && frames[0]?.checked && !webShown) { webShown = 1; applied = 0; setWeb((await getHeavy(0)).open_pairs); }
-      if (phase === 'ready' && s.route_started && frames.length > 1) { applied = 0; setPhase('routing'); }
+      if (phase === 'ready' && s.route_started && frames.length > 1) { applied = 0; routeT0 = performance.now() - frames[frames.length - 1].t * 1000; setPhase('routing'); }
       if (phase === 'routing') {
-        if (s.routing) routeSeen = true;
+        $('clock').textContent = mmss((performance.now() - routeT0) / 1000); showEvents(s.events);
         while (applied < frames.length - 1) { const i = applied + 1; applyVersion(i, await getHeavy(i)); applied = i; }
         if (statsFor >= 0 && statsDrawn !== statsFor && frames[statsFor]?.checked) showStats(statsFor);
         const last = frames[frames.length - 1];
-        if (!s.routing && s.route_seconds != null && frames.length > 1 && applied === frames.length - 1 && idle() && last.checked) {
-          heavy[frames.length - 1] = null; await getHeavy(frames.length - 1); showStats(frames.length - 1); setPhase('done'); verdict(); }
+        if (!s.routing && s.route_seconds != null && applied === frames.length - 1 && idle() && last.checked) {
+          heavy[frames.length - 1] = null; await getHeavy(frames.length - 1); showStats(frames.length - 1); verdict(); setPhase('done'); }
       }
     }
   } catch (e) { console.error(e); }
@@ -397,24 +438,27 @@ async function poll() {
 }
 
 // ---------- import ----------
-async function loadList() {
-  const boards = await (await fetch('/boards')).json(); if (!boards.length) return;
-  show('search', true);
-  const draw = q => { $('list').innerHTML = '';
-    for (const b of boards.filter(b => !q || b.name.toLowerCase().includes(q)).slice(0, 80)) {
-      const el = document.createElement('button'); el.innerHTML = '<span></span>' + (b.router_failed ? '<span class="tag">classic router failed</span>' : '');
-      el.firstChild.textContent = b.name.replace(/^\d+_/, '').replace(/_/g, ' ');
-      el.onclick = () => post('/load', JSON.stringify({ board: b.name }), { 'Content-Type': 'application/json' }); $('list').append(el); } };
-  $('search').oninput = e => draw(e.target.value.toLowerCase()); draw('');
+const loadBoard = name => post('/load', JSON.stringify({ board: name }), { 'Content-Type': 'application/json' });
+async function upload(f) { if (!f) return; const r = await post('/upload', await f.text(), { 'X-Name': f.name }); if (!r.ok) $('drophint').textContent = r.error; }
+async function loadSamples() {
+  const [feat, all] = await Promise.all([fetch('/featured').then(r => r.json()), fetch('/boards').then(r => r.json())]);
+  if (!all.length) return; show('samples', true);
+  for (const b of feat) { const el = document.createElement('button'); el.className = 'cardb';
+    el.innerHTML = `<img alt="" loading="lazy" src="/thumb/${encodeURIComponent(b.name)}.svg"><div><strong>${esc(nice(b.name))}</strong>
+      <small>${b.parts} parts · ${b.signals} signals · ${esc(b.size)}</small>${b.router_failed ? '<br><span class="badge">Classic router failed</span>' : ''}</div>`;
+    el.onclick = () => loadBoard(b.name); $('cards').append(el); }
+  $('search').placeholder = `Search all ${all.length} benchmark boards…`;
+  $('search').oninput = e => { const q = e.target.value.trim().toLowerCase(); $('results').innerHTML = ''; if (!q) return;
+    for (const b of all.filter(b => b.name.toLowerCase().includes(q)).slice(0, 12)) { const el = document.createElement('button');
+      el.innerHTML = `<span>${esc(nice(b.name))}</span>${b.router_failed ? '<span class="badge" style="margin:0">Classic router failed</span>' : ''}`; el.onclick = () => loadBoard(b.name); $('results').append(el); } };
 }
 const drop = $('drop');
 addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
 addEventListener('dragleave', () => drop.classList.remove('over'));
-addEventListener('drop', async e => { e.preventDefault(); drop.classList.remove('over');
-  const f = e.dataTransfer.files[0]; if (!f) return;
-  const r = await post('/upload', await f.text(), { 'X-Name': f.name }); if (!r.ok) drop.lastChild.textContent = r.error; });
-$('new').onclick = () => { resetWorld(); setPhase('import'); };
-$('ghost').onclick = e => { setGhost(!ghost); e.target.textContent = ghost ? 'Solid parts' : 'Glass parts'; };
+addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); upload(e.dataTransfer.files[0]); });
+$('choose').onclick = () => $('pick').click(); $('pick').onchange = e => upload(e.target.files[0]);
+$('newb').onclick = () => { resetWorld(); lastState = {}; setPhase('import'); };
+$('ghost').onclick = () => setGhost(!ghost);
 $('spin').onclick = e => { controls.autoRotate = !controls.autoRotate; e.target.textContent = controls.autoRotate ? 'Pause spin' : 'Spin'; };
 
 // ---------- animation loop ----------
@@ -422,6 +466,7 @@ const clock = new THREE.Clock(), v3 = new THREE.Vector3();
 function tick() {
   const dt = Math.min(.05, clock.getDelta()), now = clock.elapsedTime;
   if (phase === 'assembling' && boardMesh) stepAssembly(dt);
+  if (fly) { fly.t += dt; const k = Math.min(1, dt * 3.5); controls.target.lerp(fly.target, k); camera.position.lerp(fly.pos, k); if (fly.t > 1.6) fly = null; }
   for (const m of bigParts) if (m.userData.to != null) { m.material.opacity += (m.userData.to - m.material.opacity) * Math.min(1, dt * 4);
     m.material.depthWrite = m.material.opacity > .9; m.castShadow = m.material.opacity > .6; }
   if (boardMesh && phase !== 'assembling' && phase !== 'import') { boardMesh.material.opacity += (.62 - boardMesh.material.opacity) * Math.min(1, dt * 3); boardMesh.material.depthWrite = false; }
@@ -436,10 +481,10 @@ function tick() {
       a.marker.visible = true; a.marker.position.set(tipPos[0], tipPos[1], tipPos[2]);
       a.orb.scale.setScalar(r * (1 + .15 * Math.sin(now * 9))); a.orb.position.y = up * r * 1.4;
       a.beam.scale.set(r * 1.1, r * 3.2, r * 1.1); a.beam.position.y = up * r * 3.0;
-      v3.set(tipPos[0], tipPos[1] + up * r * 5, tipPos[2]).applyMatrix4(world.matrixWorld).project(camera);
-      a.tip.style.display = 'block'; a.tip.style.left = ((v3.x + 1) / 2 * innerWidth) + 'px'; a.tip.style.top = ((1 - v3.y) / 2 * innerHeight) + 'px'; }
+      const [x, y] = toScreen(v3.set(tipPos[0], tipPos[1] + up * r * 5, tipPos[2]).applyMatrix4(world.matrixWorld));
+      a.tip.style.display = 'block'; a.tip.style.left = x + 'px'; a.tip.style.top = y + 'px'; }
     if (t >= 1) { for (const o of [...j.path, ...j.vias]) settle.push({ m: o.m, to: new THREE.Color(COPPER[o.side] ?? COPPER.front), t: 0 });
-      a.done++; say(a, a.done + ' connection' + (a.done > 1 ? 's' : '') + ' laid'); a.job = null;
+      a.done++; say(a, a.done + ' laid · idle'); log(frames[j.frame]?.t ?? 0, `${a.name} connected ${nets[j.net] || 'net ' + j.net}`); a.job = null;
       if (!a.queue.some(q => q.frame === j.frame)) showStats(idle() ? applied : j.frame); }
   }
   for (let i = settle.length - 1; i >= 0; i--) { const s = settle[i]; s.t += dt / .7; s.m.color.lerp(s.to, .12); s.m.emissive.lerp(s.to, .12);
@@ -450,6 +495,6 @@ function tick() {
   for (const m of violGroup.children) m.scale.setScalar(1 + .25 * Math.sin(now * 6));
   controls.update(); renderer.render(scene, camera); requestAnimationFrame(tick);
 }
-resetWorld(); loadList(); setInterval(poll, 350); poll(); tick();
+resetWorld(); setPhase('import'); loadSamples(); setInterval(poll, 350); poll(); tick();
 </script>
 </body></html>
