@@ -4,26 +4,32 @@ Flow in the page:
   1. Import: drop a ``.kicad_pcb`` file on the page, or pick one of the benchmark boards.
   2. The board is built piece by piece from the file (outline, then each component and its pads),
      then the parts turn to glass and every connection still to make is shown as a red line.
-  3. Route: the configured producer command is started. It saves new versions of the board into
-     the run folder; each version's new copper is animated, led by the agent that produced it.
+  3. Route: the solver command is started. It saves new versions of the board into a folder;
+     each version's new copper is animated, led by the agent that produced it.
   4. Verdict: KiCad's design-rule checker decides. Fully connected with zero violations is a
      clean pass; otherwise the page lists exactly which connections are left for the engineer.
 
+The solver side of this is specified in pcb/CONTRACT.md. In short: save board versions into the
+watched folder, optionally append lines to events.jsonl there, and exit when finished.
+
     export KICAD_CLI=/path/to/kicad-cli
+    # live, with a solver
     python pcb/view3d.py --boards-dir $PCBWORLD_DATA_ROOT/pcbench/exacad_sorted \
-        --route-cmd 'python my_swarm.py --board {unrouted} --project {project} --out {out}'
+        --route-cmd 'python -m pcb.repair.swarm --boards {board} --start START --run-id {run_id}' \
+        --watch-dir 'runs/pcb/{run_id}/live/{board}' --cwd ..
+    # replay of a recorded run (label it as one)
+    python pcb/view3d.py --boards-dir ... --title 'Board router (replay of a recorded run)' \
+        --route-cmd 'python replay_run.py --from RECORDING --out {out}'
 
-Producer protocol (what --route-cmd has to do):
-  * Save each new version of the board as a ``.kicad_pcb`` file in ``{out}``. Versions are read in
-    modification-time order and are the same board with more (or less) copper.
-  * To credit an agent, end the file name with ``__<agent>``:  ``0007__w3.kicad_pcb``.
-  * Exit when finished. The verdict is shown once the command has exited.
-Placeholders: {unrouted} starting board, {project} its .kicad_pro ('' if none), {out} run folder,
-{routed} a finished version of the same board when one is known (benchmark boards have the
-human original).
+Placeholders in --route-cmd and --watch-dir: {board} board name, {unrouted} starting board file,
+{project} its .kicad_pro ('' if none), {out} a fresh folder owned by the viewer, {run_id} a fresh
+id per run, {routed} a finished version of the same board when one is known.
 
-Without --route-cmd the built-in DUMMY producer runs: made-up agents replay a finished routing.
-The page marks that clearly as test data. It only works for boards that have a finished version.
+Without --route-cmd the built-in DUMMY solver runs: made-up agents replay a finished routing.
+The page marks that clearly as test data.
+
+Every finished run is copied to --record-dir (default runs/recordings) with a manifest of when
+each version arrived, so it can be replayed later with replay_run.py.
 
 The numbers here are a live check. Reported benchmark numbers come from PCBWorld's own pipeline.
 """
@@ -50,11 +56,20 @@ HERE = Path(__file__).resolve().parent
 MIME = {".js": "text/javascript", ".html": "text/html; charset=utf-8", ".css": "text/css"}
 COPPER_ITEM_RE = re.compile(r"\n\t\((?:segment|via|arc)\b.*?\n\t\)", re.S)
 DUMMY_CMD = (f"{shlex.quote(sys.executable)} {shlex.quote(str(HERE / 'make_test_frames.py'))} "
-             "--routed {routed} --out {out} --agents 5 --burst 5 --delay 2.2 --no-start")
+             "--routed {routed} --out {out} --agents 5 --burst 5 --delay 2.2 --no-start --events")
 
 
 def kicad_cli() -> str | None:
     return os.environ.get("KICAD_CLI") or shutil.which("kicad-cli")
+
+
+def agent_of(stem: str) -> str:
+    """Who gets credit for a version, from its file name (see CONTRACT.md)."""
+    m = re.search(r"__([A-Za-z0-9_.\-]+)$", stem)          # 0007__w3
+    if m:
+        return m.group(1)
+    m = re.fullmatch(r"\d+_([A-Za-z][A-Za-z0-9_.\-]*)", stem)   # 1795290000_r1_2
+    return m.group(1) if m else ""
 
 
 def rule_check(cli: str, board: Path, tmp: Path, project: Path | None) -> dict:
@@ -91,26 +106,35 @@ def rule_check(cli: str, board: Path, tmp: Path, project: Path | None) -> dict:
 
 
 class Studio:
-    """One loaded board, its run folder, the versions seen so far and the producer process."""
+    """One loaded board, the folder being watched, the versions seen so far and the solver process."""
 
-    def __init__(self, boards_dir: Path | None, route_cmd: str | None, interval: float):
+    def __init__(self, boards_dir: Path | None, route_cmd: str | None, watch_tpl: str, cwd: Path,
+                 record_dir: Path | None, interval: float):
         self.boards_dir, self.interval = boards_dir, interval
         self.route_cmd = route_cmd or DUMMY_CMD
         self.dummy = route_cmd is None
+        self.watch_tpl, self.cwd, self.record_dir = watch_tpl, cwd, record_dir
         self.cli = kicad_cli()
         self.tmp = Path(tempfile.mkdtemp(prefix="pcb3d_"))
         self.pool = ThreadPoolExecutor(max_workers=4)
         self.lock = threading.RLock()
-        self.epoch = 0
+        self.epoch = 0                    # bumps when a board is loaded
+        self.attempt = 0                  # bumps on every Route
         self.board: dict | None = None
         self.scene: dict | None = None
         self.frames: list[dict] = []
         self.heavy: list[dict] = []
+        self.events: list[dict] = []
+        self.result: dict | None = None
         self.seen: dict[str, float] = {}
-        self.t0: float | None = None
+        self.events_pos = 0
+        self.watch: Path | None = None
+        self.run_id = ""
         self.proc: subprocess.Popen | None = None
         self.route_started: float | None = None
         self.route_seconds: float | None = None
+        self.solver_exit: int | None = None
+        self.recorded: str | None = None
         self.failed: set[str] = set()
         res = HERE / "bench" / "results" / "freerouting_d3a.json"
         if res.is_file():
@@ -130,9 +154,55 @@ class Studio:
                 out.append({"name": d.name, "router_failed": d.name in self.failed})
         return out
 
+    # ----- page extras: sample cards, thumbnails, download, stop -----
+    def featured(self) -> list[dict]:
+        """A short, picture-card list for the import screen: boards the classic router failed first."""
+        if getattr(self, "_featured", None) is not None:
+            return self._featured
+        boards = self.list_boards()
+        pick = [b for b in boards if b["router_failed"]][:5] + [b for b in boards[20:99:9] if not b["router_failed"]][:4]
+        out = []
+        for b in pick:
+            try:
+                sm = bp.scene(self.boards_dir / b["name"] / "processed_v9_guide_v3_unrouted.kicad_pcb")["summary"]
+            except Exception:
+                continue
+            out.append({**b, "parts": sm["components"], "signals": sm["nets"],
+                        "size": f'{sm["width_mm"]:g} × {sm["height_mm"]:g} mm'})
+        self._featured = out
+        return out
+
+    def thumb(self, name: str) -> bytes | None:
+        """Flat picture of a benchmark board with no copper, for its card."""
+        if not self.cli or not self.boards_dir or "/" in name or ".." in name:
+            return None
+        src = self.boards_dir / name / "processed_v9_guide_v3_unrouted.kicad_pcb"
+        if not src.is_file():
+            return None
+        out = self.tmp / f"thumb_{name}.svg"
+        if not out.is_file():
+            subprocess.run([self.cli, "pcb", "export", "svg", "--layers", "F.Cu,B.Cu,Edge.Cuts,F.SilkS",
+                            "--mode-single", "--page-size-mode", "2", "--exclude-drawing-sheet",
+                            "-o", str(out), str(src)], capture_output=True, text=True, timeout=120)
+        return out.read_bytes() if out.is_file() else None
+
+    def latest_board(self) -> tuple[str, bytes] | None:
+        """The newest version of the loaded board, for the Download button."""
+        with self.lock:
+            b, last = self.board, getattr(self, "last_path", None)
+        if not b or not last or not Path(last).is_file():
+            return None
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", b["name"]) + "_routed.kicad_pcb", Path(last).read_bytes()
+
+    def stop_route(self) -> None:
+        """Stop the solver but keep what it saved; the verdict then reports where it got to."""
+        with self.lock:
+            if self.proc and self.proc.poll() is None:
+                self.proc.terminate()
+
     def load_benchmark(self, name: str) -> None:
         d = (self.boards_dir / name) if self.boards_dir else None
-        if not d or not (d / "processed_v9_guide_v3_unrouted.kicad_pcb").is_file() or "/" in name:
+        if not d or "/" in name or not (d / "processed_v9_guide_v3_unrouted.kicad_pcb").is_file():
             raise ValueError("unknown board")
         pro = d / "processed_v9_guide_v3.kicad_pro"
         self._load(name, d / "processed_v9_guide_v3_unrouted.kicad_pcb", d / "processed_v9_guide_v3.kicad_pcb",
@@ -151,15 +221,16 @@ class Studio:
     def _load(self, name: str, unrouted: Path, routed: Path | None, project: Path | None) -> None:
         self.stop()
         scene = bp.scene(unrouted)
-        run = Path(tempfile.mkdtemp(prefix="run_", dir=self.tmp))
         with self.lock:
             self.epoch += 1
-            self.board = {"name": name, "unrouted": unrouted, "routed": routed, "project": project, "run": run}
-            self.scene = scene
-            self.frames, self.heavy, self.seen, self.t0 = [], [], {}, None
             self.attempt = 0
-            self.route_started = self.route_seconds = None
-        shutil.copyfile(unrouted, run / "v000.kicad_pcb")
+            self.board = {"name": name, "unrouted": unrouted, "routed": routed, "project": project}
+            self.scene = scene
+            self.frames, self.heavy, self.events, self.result = [], [], [], None
+            self.seen, self.events_pos, self.watch = {}, 0, None
+            self.route_started = self.route_seconds = self.solver_exit = self.recorded = None
+            # version 0 is always the bare board, straight from the imported file
+            self._add_frame("start", "", unrouted, 0.0, self.epoch, self.attempt)
         print(f"[load] {name}: {len(scene['components'])} components, {len(scene['pads'])} pads", flush=True)
 
     # ----- routing -----
@@ -172,24 +243,23 @@ class Studio:
                 return "already routing"
             if "{routed}" in self.route_cmd and not b["routed"]:
                 return "this board has no finished version for the dummy run to replay"
-            cmd = self.route_cmd.format(unrouted=shlex.quote(str(b["unrouted"])),
-                                        routed=shlex.quote(str(b["routed"] or "")),
-                                        project=shlex.quote(str(b["project"] or "")),
-                                        out=shlex.quote(str(b["run"])))
+            self.attempt += 1
+            self.run_id = time.strftime("demo_%H%M%S") + f"_{self.attempt}"
+            out = Path(tempfile.mkdtemp(prefix="run_", dir=self.tmp))
+            fill = {"board": b["name"], "run_id": self.run_id, "out": str(out), "unrouted": str(b["unrouted"]),
+                    "routed": str(b["routed"] or ""), "project": str(b["project"] or "")}
+            watch = Path(self.watch_tpl.format(**fill))
+            self.watch = watch if watch.is_absolute() else self.cwd / watch
+            self.watch.mkdir(parents=True, exist_ok=True)
+            cmd = self.route_cmd.format(**{k: shlex.quote(v) for k, v in fill.items()})
             if self.dummy and leave > 0:
                 cmd += f" --leave {int(leave)}"       # test only: preview an unfinished result
-            # a second attempt starts again from the bare board
-            for f in b["run"].glob("*.kicad_pcb"):
-                if f.name != "v000.kicad_pcb":
-                    f.unlink()
-            keep = self.seen.get("v000.kicad_pcb")
-            self.seen = {"v000.kicad_pcb": keep} if keep else {}
             del self.frames[1:], self.heavy[1:]
-            self.attempt = getattr(self, "attempt", 0) + 1
-            self.route_started, self.route_seconds = time.time(), None
-            self.proc = subprocess.Popen(cmd, shell=True, cwd=str(HERE), stdout=subprocess.DEVNULL,
+            self.events, self.result, self.seen, self.events_pos = [], None, {}, 0
+            self.route_started, self.route_seconds, self.solver_exit, self.recorded = time.time(), None, None, None
+            self.proc = subprocess.Popen(cmd, shell=True, cwd=str(self.cwd), stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL)
-        print(f"[route] {cmd}", flush=True)
+        print(f"[route] {cmd}\n[watch] {self.watch}", flush=True)
         return ""
 
     def stop(self) -> None:
@@ -197,22 +267,29 @@ class Studio:
             self.proc.terminate()
         self.proc = None
 
-    # ----- watching the run folder -----
+    # ----- watching -----
     def loop(self) -> None:
         while True:
             try:
                 with self.lock:
-                    b, epoch = self.board, self.epoch
-                    if self.proc and self.proc.poll() is not None and self.route_seconds is None and self.route_started:
+                    b, epoch, attempt, watch = self.board, self.epoch, self.attempt, self.watch
+                    finished = bool(self.proc and self.proc.poll() is not None and self.route_seconds is None
+                                    and self.route_started)
+                if b and watch:
+                    self.scan(b, watch, epoch, attempt)
+                if finished:
+                    time.sleep(0.4)
+                    self.scan(b, watch, epoch, attempt)         # pick up anything saved at the very end
+                    with self.lock:
+                        self.solver_exit = self.proc.returncode
                         self.route_seconds = round(time.time() - self.route_started, 1)
-                if b:
-                    self.scan(b, epoch)
+                    self.record(b, watch)
             except Exception as e:
                 print(f"[watcher] {type(e).__name__}: {e}", flush=True)
             time.sleep(self.interval)
 
-    def scan(self, b: dict, epoch: int) -> None:
-        files = sorted(b["run"].glob("*.kicad_pcb"), key=lambda p: (p.stat().st_mtime, p.name))
+    def scan(self, b: dict, watch: Path, epoch: int, attempt: int) -> None:
+        files = sorted(watch.glob("*.kicad_pcb"), key=lambda p: (p.stat().st_mtime, p.name))
         for f in files:
             st = f.stat()
             if self.seen.get(f.name) == st.st_mtime:
@@ -220,27 +297,54 @@ class Studio:
             time.sleep(0.1)                         # let a writer finish
             if not f.exists() or f.stat().st_size != st.st_size:
                 continue
-            cu = bp.copper(f)
-            m = re.search(r"__([A-Za-z0-9_.\-]+)$", f.stem)
             with self.lock:
-                if self.epoch != epoch:
+                if (self.epoch, self.attempt) != (epoch, attempt):
                     return
                 self.seen[f.name] = st.st_mtime
-                if self.t0 is None:
-                    self.t0 = st.st_mtime
-                idx = len(self.frames)
-                self.frames.append({"id": idx, "name": f.name, "agent": m.group(1) if m else "",
-                                    "t": round(st.st_mtime - self.t0, 2), "open": None, "violations": None,
-                                    "length_mm": cu["length_mm"], "segments": len(cu["segments"]),
-                                    "vias": len(cu["vias"]), "checked": False})
-                self.heavy.append({"id": idx, "segments": cu["segments"], "vias": cu["vias"],
-                                   "open_pairs": None, "viol_pts": None})
-            if self.cli:
-                snap = self.tmp / f"e{epoch}_v{idx:05d}.kicad_pcb"
-                shutil.copyfile(f, snap)
-                self.pool.submit(self.check, epoch, idx, snap, b["project"])
+                self._add_frame(f.name, agent_of(f.stem), f, round(time.time() - (self.route_started or time.time()), 2),
+                                epoch, attempt)
+        ev = watch / "events.jsonl"
+        if ev.is_file() and ev.stat().st_size > self.events_pos:
+            with open(ev, "rb") as fh:
+                fh.seek(self.events_pos)
+                chunk = fh.read()
+            end = chunk.rfind(b"\n") + 1               # only whole lines
+            new = []
+            for line in chunk[:end].decode(errors="replace").splitlines():
+                try:
+                    obj = json.loads(line)
+                    if isinstance(obj, dict):
+                        new.append(obj)
+                except json.JSONDecodeError:
+                    pass
+            with self.lock:
+                if (self.epoch, self.attempt) == (epoch, attempt):
+                    self.events_pos += end
+                    self.events += new
+        res = watch / "result.json"
+        if res.is_file() and self.result is None:
+            try:
+                r = json.loads(res.read_text())
+                with self.lock:
+                    self.result = r if isinstance(r, dict) else None
+            except json.JSONDecodeError:
+                pass
 
-    def check(self, epoch: int, idx: int, snap: Path, project: Path | None) -> None:
+    def _add_frame(self, name: str, agent: str, path: Path, t: float, epoch: int, attempt: int) -> None:
+        cu = bp.copper(path)
+        self.last_path = path
+        idx = len(self.frames)
+        self.frames.append({"id": idx, "name": name, "agent": agent, "t": t, "open": None, "violations": None,
+                            "length_mm": cu["length_mm"], "segments": len(cu["segments"]),
+                            "vias": len(cu["vias"]), "checked": False})
+        self.heavy.append({"id": idx, "segments": cu["segments"], "vias": cu["vias"],
+                           "open_pairs": None, "viol_pts": None})
+        if self.cli:
+            snap = self.tmp / f"e{epoch}_a{attempt}_v{idx:05d}.kicad_pcb"
+            shutil.copyfile(path, snap)
+            self.pool.submit(self.check, epoch, attempt, idx, snap, self.board["project"])
+
+    def check(self, epoch: int, attempt: int, idx: int, snap: Path, project: Path | None) -> None:
         try:
             r = rule_check(self.cli, snap, self.tmp, project)
         except Exception as e:
@@ -251,20 +355,43 @@ class Studio:
         if not r:
             return
         with self.lock:
-            if self.epoch != epoch or idx >= len(self.frames):
+            # version 0 survives a re-route, so it only has to match the board, not the attempt
+            if self.epoch != epoch or idx >= len(self.frames) or (idx > 0 and self.attempt != attempt):
                 return
             self.frames[idx].update(open=r["open"], violations=r["violations"], checked=True)
             self.heavy[idx].update(open_pairs=r["open_pairs"], viol_pts=r["viol_pts"])
 
+    def record(self, b: dict, watch: Path) -> None:
+        """Copy the finished run somewhere durable, with arrival times, so it can be replayed."""
+        if not self.record_dir:
+            return
+        dst = self.record_dir / f"{b['name']}__{self.run_id}"
+        dst.mkdir(parents=True, exist_ok=True)
+        with self.lock:
+            versions = [{"file": f["name"], "t": f["t"], "agent": f["agent"]} for f in self.frames[1:]]
+            meta = {"board": b["name"], "run_id": self.run_id, "seconds": self.route_seconds,
+                    "solver_exit": self.solver_exit, "test_data": self.dummy, "versions": versions}
+        for v in versions:
+            if (watch / v["file"]).is_file():
+                shutil.copyfile(watch / v["file"], dst / v["file"])
+        for extra in ("events.jsonl", "result.json"):
+            if (watch / extra).is_file():
+                shutil.copyfile(watch / extra, dst / extra)
+        (dst / "manifest.json").write_text(json.dumps(meta, indent=1))
+        with self.lock:
+            self.recorded = str(dst)
+        print(f"[record] {dst}", flush=True)
+
     def state(self) -> dict:
         with self.lock:
             routing = bool(self.proc and self.proc.poll() is None)
-            return {"epoch": self.epoch, "board": self.board["name"] if self.board else None,
-                    "frames": list(self.frames), "checker": bool(self.cli), "dummy": self.dummy,
-                    "routing": routing, "route_started": self.route_started is not None,
-                    "route_seconds": self.route_seconds,
-                    "attempt": getattr(self, "attempt", 0),
-                    "can_route": bool(self.board) and ("{routed}" not in self.route_cmd or bool(self.board["routed"]))}
+            can = bool(self.board) and ("{routed}" not in self.route_cmd or bool(self.board["routed"]))
+            return {"epoch": self.epoch, "attempt": self.attempt, "board": self.board["name"] if self.board else None,
+                    "frames": list(self.frames), "events": list(self.events), "result": self.result,
+                    "checker": bool(self.cli), "dummy": self.dummy, "routing": routing,
+                    "route_started": self.route_started is not None, "route_seconds": self.route_seconds,
+                    "solver_exit": self.solver_exit, "recorded": self.recorded, "can_route": can,
+                    "has_project": bool(self.board and self.board["project"])}
 
 
 def make_handler(s: Studio, title: str):
@@ -294,6 +421,24 @@ def make_handler(s: Studio, title: str):
                 return self.js(s.list_boards())
             if path == "/scene":
                 return self.js(s.scene or {})
+            if path == "/featured":
+                return self.js(s.featured())
+            if path == "/download":
+                got = s.latest_board()
+                if got:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Disposition", f'attachment; filename="{got[0]}"')
+                    self.send_header("Content-Length", str(len(got[1])))
+                    self.end_headers()
+                    self.wfile.write(got[1])
+                    return
+            m = re.fullmatch(r"/thumb/([^/]+)\.svg", path)
+            if m:
+                from urllib.parse import unquote
+                data = s.thumb(unquote(m.group(1)))
+                if data:
+                    return self.send(200, "image/svg+xml", data)
             m = re.fullmatch(r"/frame/(\d+)", path)
             if m:
                 with s.lock:
@@ -316,8 +461,11 @@ def make_handler(s: Studio, title: str):
                 if path == "/upload":
                     s.load_upload(self.headers.get("X-Name", "board.kicad_pcb"), body.decode(errors="replace"))
                     return self.js({"ok": True})
+                if path == "/stop":
+                    s.stop_route()
+                    return self.js({"ok": True})
                 if path == "/route":
-                    leave = int(json.loads(body or b"{}").get("leave", 0)) if body else 0
+                    leave = int(json.loads(body).get("leave", 0)) if body else 0
                     err = s.route(leave)
                     return self.js({"ok": not err, "error": err}, 200 if not err else 409)
             except Exception as e:
@@ -330,19 +478,24 @@ def make_handler(s: Studio, title: str):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--boards-dir", help="folder of benchmark boards (PCBWorld's pcbench/exacad_sorted)")
-    ap.add_argument("--route-cmd", help="producer command; see the placeholders above. Omit for the dummy run")
+    ap.add_argument("--route-cmd", help="solver command; see the placeholders above. Omit for the dummy run")
+    ap.add_argument("--watch-dir", default="{out}", help="folder the solver saves versions into (placeholders "
+                                                         "allowed); relative paths are relative to --cwd")
+    ap.add_argument("--cwd", default=str(HERE), help="working directory for the solver command")
+    ap.add_argument("--record-dir", default=str(HERE.parent / "runs" / "recordings"),
+                    help="where finished runs are copied for replay ('' to turn off)")
     ap.add_argument("--load", help="benchmark board name to load at start")
     ap.add_argument("--title", default="Board routing studio")
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--interval", type=float, default=0.3)
     args = ap.parse_args()
 
-    boards = Path(args.boards_dir) if args.boards_dir else None
-    s = Studio(boards, args.route_cmd, args.interval)
+    s = Studio(Path(args.boards_dir) if args.boards_dir else None, args.route_cmd, args.watch_dir,
+               Path(args.cwd).resolve(), Path(args.record_dir) if args.record_dir else None, args.interval)
     if not s.cli:
         print("kicad-cli not found (set KICAD_CLI): showing copper only, no rule check", flush=True)
     if s.dummy:
-        print("no --route-cmd: Route runs the DUMMY producer (made-up agents, test data)", flush=True)
+        print("no --route-cmd: Route runs the DUMMY solver (made-up agents, test data)", flush=True)
     if args.load:
         s.load_benchmark(args.load)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(s, args.title))

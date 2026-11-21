@@ -35,6 +35,9 @@ PCBWorld's built-in agent defaults to 256 tokens and routes nothing. Use 4,096 o
 
 ## Part 2. Brief for Hendry's coding agent
 
+**The exact input and output format between your solver and our viewer is in
+[`pcb/CONTRACT.md`](CONTRACT.md). Read that first. It supersedes the file-naming notes below.**
+
 ### Your task
 
 Build a swarm of Gemini managed agents that routes PCBWorld's real boards and scores a higher

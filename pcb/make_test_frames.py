@@ -12,6 +12,7 @@ shown as a real method's run.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import time
 from pathlib import Path
@@ -29,6 +30,8 @@ def main() -> None:
     ap.add_argument("--delay", type=float, default=0.0, help="seconds between bursts (0 = write all at once)")
     ap.add_argument("--no-start", action="store_true", help="do not write the empty starting version "
                                                             "(the caller already put it there)")
+    ap.add_argument("--events", action="store_true", help="also write events.jsonl and result.json, "
+                                                          "as pcb/CONTRACT.md describes")
     ap.add_argument("--leave", type=int, default=0, help="leave this many nets unrouted at the end, "
                                                          "to test what an unfinished board looks like")
     ap.add_argument("--burst", type=int, default=1, help="versions written back to back before each pause, "
@@ -64,6 +67,13 @@ def main() -> None:
         print("v000: no copper", flush=True)
     kept: set[int] = set()
     step = 0
+    t0 = time.time()
+    names = dict(re.findall(r'\(net\s+(\d+)\s+"([^"]*)"\)', text))
+
+    def event(**kw) -> None:
+        if args.events:
+            with open(out / "events.jsonl", "a") as fh:
+                fh.write(json.dumps({"t": round(time.time() - t0, 2), **kw}) + "\n")
     for i in range(0, len(order), args.per_step):
         if args.delay and step % max(1, args.burst) == 0:
             time.sleep(args.delay)
@@ -74,6 +84,12 @@ def main() -> None:
         who = f"__w{(step - 1) % args.agents + 1}" if args.agents else ""
         write(f"v{step:03d}{who}.kicad_pcb", kept)
         print(f"v{step:03d}{who}: {len(kept)}/{len(order)} nets", flush=True)
+        for n in order[i:i + args.per_step]:
+            event(agent=who[2:] or "router", type="done", net=names.get(str(n)) or f"net {n}",
+                  file=f"v{step:03d}{who}.kicad_pcb")
+    if args.events:
+        (out / "result.json").write_text(json.dumps({"claimed_clean": args.leave == 0, "attempts": step,
+                                                     "note": "made-up test run"}))
 
 
 if __name__ == "__main__":
